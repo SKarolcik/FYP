@@ -5,7 +5,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <pigpio.h>
+
+static volatile uint32_t count;
 
 gpioISRFunc_t first_interrupt(int gpio, int level, uint32_t tick)
 {
@@ -17,6 +20,17 @@ gpioISRFunc_t first_interrupt(int gpio, int level, uint32_t tick)
     bits_read = bits_read >> 18;
     printf("ADC output: %04X\n", bits_read);
     GPIOsetval = gpioWrite(6, 1);
+    count += 1;
+}
+
+void time_samples(){
+ clock_t start = clock();
+ while (count != 12799){
+
+ }
+ clock_t end = clock();
+ double total = (double)(end - start)/CLOCK_PER_SEC;
+ printf("Time difference: %f\n",total);
 }
 
 int main(int argc, char **argv)
@@ -28,6 +42,7 @@ int main(int argc, char **argv)
     }
     else
     {
+        count = 0;
     	// pigpio initialised okay.
    	printf("Pigpio intialized\n");
     }
@@ -69,6 +84,7 @@ int main(int argc, char **argv)
 
     GPIOsetval = gpioWrite(6, 1); 
     char config[] = {0x00, 0x00}; // Data to send
+    char base_c[] = {0x00, 0x00};
     unsigned int tmp_conf[2];
     
     if (gpioSetISRFunc(17,FALLING_EDGE,0,first_interrupt)==0)
@@ -87,6 +103,11 @@ int main(int argc, char **argv)
         //config[1] = (char)tmp_conf[1];
         printf("Sent to SPI: %02X  %02X\n", config[0], config[1]);
         int b_trans = spiXfer(spi_handle,config,buf,2);
+        if (config[0]>0x80)
+        {
+            time_samples();
+            int b_trans = spiXfer(spi_handle,base_c,buf,2);
+        }
         // buf will now be filled with the data that was read from the slave
         printf("Bytes transferred: %d\n",b_trans);
         printf("Read from SPI: %02X  %02X\n", buf[0], buf[1]);
