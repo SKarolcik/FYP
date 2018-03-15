@@ -16,19 +16,20 @@ void flash_int(int gpio, int level, uint32_t tick)
 {
     if (count < 12799)
     {
-       if (count == 0)
-       start = clock();
-	    uint32_t bits_read;
+       //if (count == 0)
+       //start = clock();
+	    //uint32_t bits_read;
 	    //printf("Interrupt happened at GPIO %d, at time %d\n",gpio,tick);
-	    bits_read = (gpioRead_Bits_0_31() & 0x03FC0000) >> 18;
+	    //bits_read = (gpioRead_Bits_0_31() & 0x03FC0000) >> 18;
 	    //printf("ADC output: %04X\n; Count: %d", bits_read, count);
 	    count += 1;
       if (count == 12799)
       {
-	clock_t end = clock();
-        double total = (double)(end - start)/CLOCKS_PER_SEC;
-        printf("Time difference: %f\n",total);
+	//clock_t end = clock();
+        //double total = (double)(end - start)/CLOCKS_PER_SEC;
+        //printf("Time difference: %f\n",total);
         count = 0;
+        n_frames += 1;
       }
     }
 }
@@ -43,11 +44,12 @@ int main(int argc, char **argv)
     else
     {
         count = 0;
+        n_frames = 0;
     	// pigpio initialised okay.
    	printf("Pigpio intialized\n");
     }
 
-    if (gpioHardwareClock(4,1000000) == 0){
+    if (gpioHardwareClock(4,2000000) == 0){
 	printf("Clock started\n");
     }
 
@@ -85,12 +87,14 @@ int main(int argc, char **argv)
     char config[] = {0x00, 0x00}; // Data to send
     //unsigned int tmp_conf[2];
 
+    /*
     gpioISRFunc_t first_interrupt = &flash_int;
     
     if (gpioSetISRFunc(17,FALLING_EDGE,0,first_interrupt)==0)
 	{
 	    printf("ISR registered on pin 17\n");
 	}
+    */
     
     char* buf = malloc(2*sizeof(char));
     
@@ -110,7 +114,7 @@ int main(int argc, char **argv)
         printf("Read from SPI: %02X  %02X\n", buf[0], buf[1]);
     }    
      
-
+    printf("\nFrames observed: %d\n", n_frames);
 
     if (spiClose(spi_handle) == 0)
     {
