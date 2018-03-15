@@ -55,16 +55,16 @@ int main(int argc, char **argv)
 
     int GPIOsetval = 0;
     GPIOsetval = gpioSetMode(17, PI_INPUT);
-    GPIOsetval = gpioSetMode(18, PI_INPUT);
-    GPIOsetval = gpioSetMode(19, PI_INPUT);
-    GPIOsetval = gpioSetMode(20, PI_INPUT);
-    GPIOsetval = gpioSetMode(21, PI_INPUT);
-    GPIOsetval = gpioSetMode(22, PI_INPUT);
-    GPIOsetval = gpioSetMode(23, PI_INPUT);
-    GPIOsetval = gpioSetMode(24, PI_INPUT);
-    GPIOsetval = gpioSetMode(25, PI_INPUT);
+    //GPIOsetval = gpioSetMode(18, PI_INPUT);
+    //GPIOsetval = gpioSetMode(19, PI_INPUT);
+    //GPIOsetval = gpioSetMode(20, PI_INPUT);
+    //GPIOsetval = gpioSetMode(21, PI_INPUT);
+    //GPIOsetval = gpioSetMode(22, PI_INPUT);
+    //GPIOsetval = gpioSetMode(23, PI_INPUT);
+    //GPIOsetval = gpioSetMode(24, PI_INPUT);
+    //GPIOsetval = gpioSetMode(25, PI_INPUT);
 
-    GPIOsetval = gpioSetMode(6, PI_OUTPUT);
+    //GPIOsetval = gpioSetMode(6, PI_OUTPUT);
     
 
     unsigned b_rate = 32000; //20MHz maximum

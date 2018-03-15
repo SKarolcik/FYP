@@ -82,11 +82,12 @@ static irqreturn_t rx_isr(int irq, void *data)
    	//struct timespec current_time;
     //struct timespec delta;
    	unsigned int curPx = 0;
+	int i;
 
    	//getnstimeofday(&current_time);
 	//delta = timespec_sub(current_time, lastIrq_time);
 	//ns = ((long long)delta.tv_sec * 1000000)+(delta.tv_nsec/1000); 
-    for (int i = 0; i<12;i++){
+    for (i = 0; i<12;i++){
         curPx += (gpio_get_value(signals[i+1].gpio) << i);
     }
 	pxValue[pWrite] = curPx;
@@ -136,7 +137,7 @@ static ssize_t rx433_read(struct file *file, char __user *buf,
 
 	_count = 0;
 	if ( pRead != pWrite ) {
-		sprintf(tmp,"%ld\n",pxValue[pRead]);
+		sprintf(tmp,"%d\n",pxValue[pRead]);
   	    _count = strlen(tmp);
         _error_count = copy_to_user(buf,tmp,_count+1);
         if ( _error_count != 0 ) {
@@ -194,7 +195,7 @@ static int __init adccomms_init(void)
 	}
 	rx_irqs[0] = ret;
 	printk(KERN_INFO "RFRPI - Successfully requested RX IRQ # %d\n", rx_irqs[0]);
-	ret = request_irq(rx_irqs[0], rx_isr, IRQF_TRIGGER_FALLING | IRQF_DISABLED, "rfrpi#rx", NULL);
+	ret = request_irq(rx_irqs[0], rx_isr, IRQF_TRIGGER_FALLING | 0, "rfrpi#rx", NULL);
 	if(ret) {
 		printk(KERN_ERR "RFRPI - Unable to request IRQ: %d\n", ret);
 		goto fail3;
