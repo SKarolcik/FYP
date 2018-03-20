@@ -9,28 +9,29 @@
 #include <pigpio.h>
 
 static volatile uint32_t count;
+static volatile uint32_t n_frames;
+static volatile clock_t start,end;
 
-gpioISRFunc_t first_interrupt(int gpio, int level, uint32_t tick)
+void flash_int(int gpio, int level, uint32_t tick)
 {
-    uint32_t bits_read;
-    printf("Interrupt happened at GPIO %d, at time %d\n",gpio,tick);
-    int GPIOsetval = gpioWrite(6, 0);
-    bits_read = gpioRead_Bits_0_31();
-    bits_read = bits_read & 0x03FC0000;
-    bits_read = bits_read >> 18;
-    printf("ADC output: %04X\n", bits_read);
-    GPIOsetval = gpioWrite(6, 1);
-    count += 1;
-}
-
-void time_samples(){
- clock_t start = clock();
- while (count != 12799){
-
- }
- clock_t end = clock();
- double total = (double)(end - start)/CLOCK_PER_SEC;
- printf("Time difference: %f\n",total);
+    if (count < 12799)
+    {
+       //if (count == 0)
+       //start = clock();
+	    //uint32_t bits_read;
+	    //printf("Interrupt happened at GPIO %d, at time %d\n",gpio,tick);
+	    //bits_read = (gpioRead_Bits_0_31() & 0x03FC0000) >> 18;
+	    //printf("ADC output: %04X\n; Count: %d", bits_read, count);
+	    count += 1;
+      if (count == 12799)
+      {
+	//clock_t end = clock();
+        //double total = (double)(end - start)/CLOCKS_PER_SEC;
+        //printf("Time difference: %f\n",total);
+        count = 0;
+        n_frames += 1;
+      }
+    }
 }
 
 int main(int argc, char **argv)
@@ -43,26 +44,27 @@ int main(int argc, char **argv)
     else
     {
         count = 0;
+        n_frames = 0;
     	// pigpio initialised okay.
    	printf("Pigpio intialized\n");
     }
 
-    if (gpioHardwareClock(4,100000) == 0){
+    if (gpioHardwareClock(4,2000000) == 0){
 	printf("Clock started\n");
     }
 
     int GPIOsetval = 0;
     GPIOsetval = gpioSetMode(17, PI_INPUT);
-    GPIOsetval = gpioSetMode(18, PI_INPUT);
-    GPIOsetval = gpioSetMode(19, PI_INPUT);
-    GPIOsetval = gpioSetMode(20, PI_INPUT);
-    GPIOsetval = gpioSetMode(21, PI_INPUT);
-    GPIOsetval = gpioSetMode(22, PI_INPUT);
-    GPIOsetval = gpioSetMode(23, PI_INPUT);
-    GPIOsetval = gpioSetMode(24, PI_INPUT);
-    GPIOsetval = gpioSetMode(25, PI_INPUT);
+    //GPIOsetval = gpioSetMode(18, PI_INPUT);
+    //GPIOsetval = gpioSetMode(19, PI_INPUT);
+    //GPIOsetval = gpioSetMode(20, PI_INPUT);
+    //GPIOsetval = gpioSetMode(21, PI_INPUT);
+    //GPIOsetval = gpioSetMode(22, PI_INPUT);
+    //GPIOsetval = gpioSetMode(23, PI_INPUT);
+    //GPIOsetval = gpioSetMode(24, PI_INPUT);
+    //GPIOsetval = gpioSetMode(25, PI_INPUT);
 
-    GPIOsetval = gpioSetMode(6, PI_OUTPUT);
+    //GPIOsetval = gpioSetMode(6, PI_OUTPUT);
     
 
     unsigned b_rate = 32000; //20MHz maximum
@@ -82,15 +84,17 @@ int main(int argc, char **argv)
     int spi_handle = spiOpen(0,b_rate,spi_flags);
     
 
-    GPIOsetval = gpioWrite(6, 1); 
     char config[] = {0x00, 0x00}; // Data to send
-    char base_c[] = {0x00, 0x00};
-    unsigned int tmp_conf[2];
+    //unsigned int tmp_conf[2];
+
+    /*
+    gpioISRFunc_t first_interrupt = &flash_int;
     
     if (gpioSetISRFunc(17,FALLING_EDGE,0,first_interrupt)==0)
 	{
 	    printf("ISR registered on pin 17\n");
 	}
+    */
     
     char* buf = malloc(2*sizeof(char));
     
@@ -99,21 +103,18 @@ int main(int argc, char **argv)
     {
         printf("Input SPI configuration (two hex numbers): ");
         scanf("%x %x", &config[0], &config[1]);
+        if (config[0] == 0x00){
+        count = 0;}
         //config[0] = (char)tmp_conf[0];
         //config[1] = (char)tmp_conf[1];
         printf("Sent to SPI: %02X  %02X\n", config[0], config[1]);
         int b_trans = spiXfer(spi_handle,config,buf,2);
-        if (config[0]>0x80)
-        {
-            time_samples();
-            int b_trans = spiXfer(spi_handle,base_c,buf,2);
-        }
         // buf will now be filled with the data that was read from the slave
         printf("Bytes transferred: %d\n",b_trans);
         printf("Read from SPI: %02X  %02X\n", buf[0], buf[1]);
     }    
      
-
+    printf("\nFrames observed: %d\n", n_frames);
 
     if (spiClose(spi_handle) == 0)
     {
