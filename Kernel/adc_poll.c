@@ -29,6 +29,8 @@
 #include <linux/time.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
+#include <linux/wait.h>
+#include <linux/poll.h>
 
 #define GPIO_FOR_RX_SIGNAL	17
 #define GPIO_BIT0_ADC		18
@@ -48,6 +50,9 @@
 
 /* Last Interrupt timestamp */
 //static struct timespec lastIrq_time;
+
+static DECLARE_WAIT_QUEUE_HEAD(rx433_wait); //Polling
+
 static unsigned int pxValue[BUFFER_SZ];
 static int  pRead;
 static int  pWrite;
@@ -104,8 +109,20 @@ static irqreturn_t rx_isr(int irq, void *data)
 	} else {
 		wasOverflow = 0;
 	}
+	wake_up_interruptible(&rx433_wait); //Polling
 	return IRQ_HANDLED;
 }
+
+
+static unsigned int rx433_poll(struct file *file, poll_table *wait)
+{
+    poll_wait(file, &rx433_wait, wait);
+    if (pRead != pWrite )
+        return POLLIN | POLLRDNORM;
+    return 0;
+}
+
+
 
 
 static int rx433_open(struct inode *inode, struct file *file)
@@ -137,7 +154,7 @@ static ssize_t rx433_read(struct file *file, char __user *buf,
 
 	_count = 0;
 	if ( pRead != pWrite ) {
-		sprintf(tmp,"%03d\n",pxValue[pRead]);
+		sprintf(tmp,"%d\n",pxValue[pRead]);
   	    _count = strlen(tmp);
         _error_count = copy_to_user(buf,tmp,_count+1);
         if ( _error_count != 0 ) {
@@ -155,6 +172,7 @@ static struct file_operations rx433_fops = {
     .read = rx433_read,
     .write = rx433_write,
     .release = rx433_release,
+    .poll = rx433_poll,
 };
 
 static struct miscdevice rx433_misc_device = {

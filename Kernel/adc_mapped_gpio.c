@@ -46,13 +46,37 @@
 #define DEV_NAME 			"adccomms" 
 #define BUFFER_SZ			1048576 
 
-/* Last Interrupt timestamp */
-//static struct timespec lastIrq_time;
-static unsigned int pxValue[BUFFER_SZ];
+#define BCM2708_PERI_BASE       0x3F000000
+#define GPIO_BASE               (BCM2708_PERI_BASE + 0x200000)	// GPIO controller  
+
+#define INP_GPIO(g)   *(gpio.addr + ((g)/10)) &= ~(7<<(((g)%10)*3)) 
+#define OUT_GPIO(g)   *(gpio.addr + ((g)/10)) |=  (1<<(((g)%10)*3)) //001
+//alternative function
+#define SET_GPIO_ALT(g,a) *(gpio.addr + (((g)/10))) |= (((a)<=3?(a) + 4:(a)==4?3:2)<<(((g)%10)*3))
+ 
+#define GPIO_SET  *(gpio.addr + 7)  // sets   bits which are 1 ignores bits which are 0
+#define GPIO_CLR  *(gpio.addr + 10) // clears bits which are 1 ignores bits which are 0
+ 
+#define GPIO_READ(g)  *(gpio.addr + 13) &= (1<<(g))
+
+
+static uint32_t pxValue[BUFFER_SZ];
 static int  pRead;
 static int  pWrite;
 static int  wasOverflow;
 
+static struct bcm2835_peripheral {
+    unsigned long addr_p;
+    int mem_fd;
+    void *map;
+    volatile unsigned int *addr;
+};
+ 
+
+static int map_peripheral(struct bcm2835_peripheral *p);
+static void unmap_peripheral(struct bcm2835_peripheral *p);
+
+static struct bcm2835_peripheral gpio_rd = {GPIO_BASE};
 
 /* Define GPIOs for RX signal */
 static struct gpio signals[] = {
@@ -71,6 +95,21 @@ static struct gpio signals[] = {
 		{ GPIO_BIT11_ADC, GPIOF_IN, "Bit11 ADC" }
 };
 
+static int map_peripheral(struct bcm2835_peripheral *p)
+{
+	p->map = ioremap(GPIO_BASE, 41*4);
+	p->addr=(uint32_t *)p->map; //41 GPIO register with 32 bit (4*8)
+	if (p->addr != NULL){
+	printk(KERN_INFO "Succesfully mapped GPIO port"); 
+	}
+   return 0;
+}
+ 
+static void unmap_peripheral(struct bcm2835_peripheral *p) {
+ 	iounmap(p->addr);//unmap the address
+}
+
+
 /* Later on, the assigned IRQ numbers for the buttons are stored here */
 static int rx_irqs[] = { -1 };
 
@@ -79,19 +118,13 @@ static int rx_irqs[] = { -1 };
  */
 static irqreturn_t rx_isr(int irq, void *data)
 {
-   	//struct timespec current_time;
-    //struct timespec delta;
-   	unsigned int curPx = 0;
-	int i;
 
-   	//getnstimeofday(&current_time);
-	//delta = timespec_sub(current_time, lastIrq_time);
-	//ns = ((long long)delta.tv_sec * 1000000)+(delta.tv_nsec/1000); 
-    for (i = 0; i<12;i++){
-        curPx += (gpio_get_value(signals[i+1].gpio) << i);
-    }
+   	uint32_t curPx = 0;
+
+	curPx = *(gpio_rd.addr + 13);
+	curPx = (curPx & (0b11111111<<(18)))>>(18);
+	
 	pxValue[pWrite] = curPx;
-   	//getnstimeofday(&lastIrq_time);
 
 	pWrite = ( pWrite + 1 )  & (BUFFER_SZ-1);
 	if (pWrite == pRead) {
@@ -179,6 +212,12 @@ static int __init adccomms_init(void)
 	pWrite = 0;
 	wasOverflow = 0;
 
+	if(map_peripheral(&gpio_rd) == -1) 
+	{
+		printk(KERN_ALERT "Failed to map the physical GPIO registers into the virtual memory space.\n");
+		return -1;
+	}
+
 	// register GPIO PIN in use
 	ret = gpio_request_array(signals, ARRAY_SIZE(signals));
 
@@ -222,7 +261,8 @@ static void __exit adccomms_exit(void)
 {
 	printk(KERN_INFO "%s\n", __func__);
 
-    misc_deregister(&rx433_misc_device);
+    	misc_deregister(&rx433_misc_device);
+	unmap_peripheral(&gpio_rd);
 
 	// free irqs
 	free_irq(rx_irqs[0], NULL);	

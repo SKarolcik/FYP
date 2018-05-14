@@ -1,5 +1,5 @@
 ifneq (${KERNELRELEASE},)
-	obj-m  = adccomms.o
+	obj-m  = adc_mapped_gpio.o
 else
 	KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
 	MODULE_DIR := $(shell pwd)
