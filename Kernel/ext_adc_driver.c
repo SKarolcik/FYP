@@ -59,6 +59,23 @@ static int  prevPx;					//Value of previous sample, to store 2 samples per buffe
 
 volatile uint32_t *gpio_reg;
 
+/* Define GPIOs for RX signal */
+static struct gpio signals[] = {
+		{ GPIO_FOR_RX_SIGNAL, GPIOF_IN, "RX Signal" },	// Rx signal
+		{ GPIO_BIT0_ADC, GPIOF_IN, "Bit0 ADC" },
+		{ GPIO_BIT1_ADC, GPIOF_IN, "Bit1 ADC" },
+		{ GPIO_BIT2_ADC, GPIOF_IN, "Bit2 ADC" },
+		{ GPIO_BIT3_ADC, GPIOF_IN, "Bit3 ADC" },
+		{ GPIO_BIT4_ADC, GPIOF_IN, "Bit4 ADC" },
+		{ GPIO_BIT5_ADC, GPIOF_IN, "Bit5 ADC" },
+		{ GPIO_BIT6_ADC, GPIOF_IN, "Bit6 ADC" },
+		{ GPIO_BIT7_ADC, GPIOF_IN, "Bit7 ADC" },
+		{ GPIO_BIT8_ADC, GPIOF_IN, "Bit8 ADC" },
+		{ GPIO_BIT9_ADC, GPIOF_IN, "Bit9 ADC" },
+		{ GPIO_BIT10_ADC, GPIOF_IN, "Bit10 ADC" },
+		{ GPIO_BIT11_ADC, GPIOF_IN, "Bit11 ADC" }
+		};
+
 /* Later on, the assigned IRQ numbers for the buttons are stored here */
 static int rx_irqs[] = { -1 };
 
@@ -70,9 +87,9 @@ static irqreturn_t rx_isr(int irq, void *data)
 
    	uint32_t curPx = 0;
 
-	curPx = *(gpio_rd.addr + 13);
-	curPx = (curPx & (0b1111111111<<(18)))>>(18) + (curPx & (0b11<<(5)))<<(5);
-	/*
+	curPx = *(gpio_reg + 13);
+	curPx = ((curPx & (0b1111111111<<(18)))>>(18)) + ((curPx & (0b11<<(5)))<<(5));
+	
 	if (prevPx == 0){
 		prevPx = curPx;
 	}else{
@@ -80,21 +97,22 @@ static irqreturn_t rx_isr(int irq, void *data)
 		prevPx = 0;
 		pxValue[pWrite] = curPx;
 		pWrite = (pWrite + 1)  & (BUFFER_SZ - 1);
+		if (pWrite == pRead) {
+		// overflow
+			pRead = ( pRead + 1 ) & (BUFFER_SZ-1);
+			if ( wasOverflow == 0 ) {
+	       			printk(KERN_ERR "EXT_ADC - Buffer Overflow - IRQ will be missed");
+	       			wasOverflow = 1;
+	    		}
+		} else {
+		wasOverflow = 0;
+		}
 	} 
-	*/
+	/*
 	pxValue[pWrite] = curPx;
 	pWrite = (pWrite + 1)  & (BUFFER_SZ - 1);
+	*/
 	
-	if (pWrite == pRead) {
-		// overflow
-		pRead = ( pRead + 1 ) & (BUFFER_SZ-1);
-		if ( wasOverflow == 0 ) {
-	       printk(KERN_ERR "EXT_ADC - Buffer Overflow - IRQ will be missed");
-	       wasOverflow = 1;
-	    }
-	} else {
-		wasOverflow = 0;
-	}
 	return IRQ_HANDLED;
 }
 
