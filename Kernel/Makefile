@@ -1,5 +1,5 @@
 ifneq (${KERNELRELEASE},)
-	obj-m  = ext_adc_driver.o
+	obj-m  = ext_adc_driver_v2.o
 else
 	KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
 	MODULE_DIR := $(shell pwd)

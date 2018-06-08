@@ -35,27 +35,33 @@ class GuiViewer(QtGui.QWidget):
         self.receivedSPIEdit.setReadOnly(True)
         self.receivedSPILb = QtGui.QLabel('Received SPI')
 
-        self.imv = pg.ImageView()
+        self.frameLb = QtGui.QLabel('N = N/A')
+        self.timeLb = QtGui.QLabel('t = N/A')
+
+        #self.imv = pg.ImageView()
+        self.imv = pg.GraphicsWindow()
+        self.plot = self.imv.addPlot()
 
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
 
         grid.addWidget(self.sendSPIBtn, 1, 0)
         grid.addWidget(self.sendSPIEdit, 1, 1)
-        grid.addWidget(self.quitBtn, 1, 2)
+        grid.addWidget(self.quitBtn, 1, 3)
         grid.addWidget(self.setSPILb, 2, 0)
         grid.addWidget(self.setSPIEdit, 2, 1)
-        grid.addWidget(self.resetBtn, 2, 2)
+        grid.addWidget(self.resetBtn, 1, 2)
         grid.addWidget(self.receivedSPILb, 3, 0)
         grid.addWidget(self.receivedSPIEdit, 3, 1)
+        grid.addWidget(self.frameLb, 4, 2)
+        grid.addWidget(self.timeLb, 4, 3)
 
-        grid.addWidget(self.imv, 4, 0, 3, 3)
+        grid.addWidget(self.imv, 5, 0, 4, 4)
         
-
 
         self.setLayout(grid)
 
-        #self.setGeometry(300, 300, 350, 300)
+        #self.setGeometry(450, 800, 450, 800)
         self.setWindowTitle('ISFET viewer')    
         self.show()
         self.sendSPIBtn.clicked.connect(self.sendSPI)
@@ -92,10 +98,16 @@ class GuiViewer(QtGui.QWidget):
         #time.sleep(2)
         if not self.queue.empty():
             frame = self.queue.get()
-            self.imv.setImage(frame[0], levels=(0x000,0xFFF))
-            #print frame
+            #self.imv.setImage(frame[0], levels=(0x000,0xFFF))
+            im = pg.ImageItem(frame[0], levels=(0x000,0xFFF))
+            self.plot.addItem(im)
+            #self.plot.hideAxis('left')
+            #self.plot.hideAxis('bottom')
+            print ("Drawing " + str(frame[2]))
+            self.frameLb.setText(("N = " + str(frame[2])))
+            self.timeLb.setText(("t = " + str(frame[1])))
 
-        QtCore.QTimer.singleShot(10, self.pollQueue)
+        QtCore.QTimer.singleShot(100, self.pollQueue)
             
                    
 
@@ -117,7 +129,7 @@ class GuiViewer(QtGui.QWidget):
             self.thread.start()
             time.sleep(0.5)
             self.pollQueue()
-            print "Started frame"
+            #print "Started frame"
         
 
 
@@ -130,7 +142,7 @@ class ThreadedTask(threading.Thread):
         self.counter = 0
         self.increments = (1.0/(float(FREQUENCY)/float(increments))) * 12800
         self.frameFlattened = np.zeros((12800,1))
-        self.singleFrame = np.zeros((64,200))
+        self.singleFrame = np.zeros((200,64))
     def stop(self):
         print "Stopping data read"
         self._stop_event.set()
@@ -150,11 +162,12 @@ class ThreadedTask(threading.Thread):
                 val1 = val1 >> 16
                 self.frameFlattened[pos] = val0
                 self.frameFlattened[pos+1] = val1
-            self.singleFrame = self.frameFlattened.reshape((64,200))           
+            print self.counter
+            self.singleFrame = self.frameFlattened.reshape((200,64))           
             #print "frame happened" + str(single_frame[1][1]) + " And seconds currently: " + str(seconds_elapsed)
             self.queue.put((self.singleFrame,(self.counter*self.increments),self.counter))
             self.counter = self.counter + 1
-            #self.queue.put(single_frame)
+            #self.queue.put(self.singleFrame)
 
 
 def main():

@@ -10,7 +10,9 @@ import os
 
 import threading
 import Queue
+import time
 
+FREQUENCY = 2000000
 
 class mclass:
     def __init__(self,  window):
@@ -18,137 +20,115 @@ class mclass:
         self.box = Entry(window)
         self.close_button = Button(window, text="Quit", command=self.exitWindow)
         self.sendSPIbutton = Button(window,text="Send through SPI", command=self.sendSPI)
+        self.endSPI = Button(window, text="Reset chip", command = self.resetChip)
         self.readSPIlabel = Label(window, text="Received from SPI:")
         self.readSPIvalue = Label(window, text="N/A")
-        self.terminalView = Frame(window, heigh=100,width=300)
+        self.queue = Queue.Queue()
         
         self.close_button.grid(row=2,column=4)
         self.box.grid(row=2,column=3)
         self.readSPIlabel.grid(row=3,column=2)
         self.readSPIvalue.grid(row=3,column=3)
         self.sendSPIbutton.grid(row=2,column=2)
-        self.terminalView.grid(row=6,column=2,columnspan=3)
+        self.endSPI.grid(row=3,column=4)
+
+        self.figure = Figure(figsize=(12,4))
+
+        self.inputFile = open("out_readings.dat", "r")
+
+        self.SPIhandle = 0
 
         self.pi = pigpio.pi()             # exit script if no connection
         if not self.pi.connected:
             exit()
-        self.pi.hardware_clock(4, 1000000) # 5 KHz clock on GPIO 4
+        self.pi.hardware_clock(4, FREQUENCY) # 2 KHz clock on GPIO 4
 
 
     def exitWindow(self):
         self.pi.hardware_clock(4,0)
         self.pi.stop()
+        self.thread.stop() 
+        self.thread.join()
+        self.inputFile.close()               
         self.window.quit()
-        
-    def plot (self):
-    
-        fig = Figure(figsize=(4,4))
-        a = fig.add_subplot(111)
-        a.imshow(heat_map, cmap='hot', interpolation='nearest')
 
-    def exitWindow(self):
-        #self.pi.hardware_clock(4,0)
-        #self.pi.stop()
+    def resetChip(self):
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [5, 5])
+        print ("SPI sent: 0x05 0x05")
+        print ("SPI received: " + str(hex(rx_data[0])) + " " + str(hex(rx_data[1])))
         
-        self.thread.stop()
-       #self.plotting.stop()
-        #self.thread.join()  
-        #self.plotting.join() 
-        os.close(self.device) 
-        self.window.quit()
-        
-        canvas = FigureCanvasTkAgg(fig, master=self.window)
-        canvas.get_tk_widget().grid(row=5,column=2,columnspan=3)
-        canvas.draw()
+    def pollQueue(self):
+        if not self.queue.empty():
+            frame = self.queue.get()
+            #print frame
+            
+            self.figure.clf()
+            a = self.figure.add_subplot(111)
+            a.imshow(frame[0], cmap='hot', interpolation='nearest',vmin=0,vmax=0xFFF)
+
+            a.set_title (("N = " + str(frame[2]) + " Frame at t = " + str(frame[1]) + "s"), fontsize=16)
+            a.set_ylabel("Y", fontsize=14)
+            a.set_xlabel("X", fontsize=14)
+                
+            canvas = FigureCanvasTkAgg(self.figure, master=self.window)
+            canvas.get_tk_widget().grid(row=4,column=2,columnspan=10)
+            canvas.draw()         
+
+        self.window.after(100, self.pollQueue)
 
     def sendSPI(self):
         hex_vals = self.box.get()
         self.box.delete(0,END)
-        print "Nothing " + hex_vals
         hex_data = bytearray.fromhex(hex_vals)
-        h = self.pi.spi_open(0, 50000, 0b0100000011110000000001) 
-        (count, rx_data) = self.pi.spi_xfer(h, hex_data)
-        print count
-        print rx_data[0]
+        self.SPIhandle = self.pi.spi_open(0, 50000, 0b0100000011110000000001) 
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, hex_data)
+        print ("SPI sent: " + str(hex(hex_data[0])) + " " + str(hex(hex_data[1])))
+        print ("SPI received: " + str(hex(rx_data[0])) + " " + str(hex(rx_data[1])))
         self.readSPIvalue["text"] = str(hex(rx_data[0])) + " " + str(hex(rx_data[1]))
-        if (hex_data[1] == 0x80):
-            self.plot()
+        if (hex_data[0] >= 0x80):
+            #self.thread = ThreadedTask(self.inputFile, self.queue, hex_data[1])
+            #self.thread.start()
+            #time.sleep(1)
+            #self.pollQueue()
+            print "Started frame"
             
-
-class ThreadedPlot(threading.Thread):
-    def __init__(self, window, queue):
+class ThreadedTask(threading.Thread):
+    def __init__(self, inputFile, queue, increments):
         threading.Thread.__init__(self)
-        self.window = window
+        self.inputFile = inputFile
         self.queue = queue
         self._stop_event = threading.Event()
-    def stop(self):
-        print "Stopping plot"
-        self._stop_event.set()
-    def stopped(self):
-        return self._stop_event.is_set()
-    def run(self):
-        #time.sleep(5)  # Simulate long running process
-        currFrame = self.queue.get()
-        fig = Figure(figsize=(6,2))
-        
-        while not self.stopped():
-            if (not self.queue.empty()):
-                print "Plotting"
-                fig.clf()
-                a = fig.add_subplot(111)
-                a.imshow(currFrame, cmap='hot', interpolation='nearest',vmin=0,vmax=0xFFF)
-                #a.plot(p, range(2 +max(x)),color='blue')
-                #a.invert_yaxis()
-
-                a.set_title ("Estimation Grid", fontsize=16)
-                a.set_ylabel("Y", fontsize=14)
-                a.set_xlabel("X", fontsize=14)
-                
-                canvas = FigureCanvasTkAgg(fig, master=self.window)
-                #canvas = prepHeatMap(heat_map)
-                canvas.get_tk_widget().grid(row=4,column=2,columnspan=6)
-                #canvas.pack()
-                canvas.draw()
-
-'''
-class ThreadedTask(threading.Thread):
-    def __init__(self, window, device):
-        threading.Thread.__init__(self)
-        self.window = window
-        self.device = device
-        self.frame = np.zeros((64,200))
-        self._stop_event = threading.Event()
-        self.figure = Figure(figsize=(6,2))
+        self.counter = 0
+        self.increments = float(FREQUENCY)/float(increments)
     def stop(self):
         print "Stopping data read"
         self._stop_event.set()
     def stopped(self):
         return self._stop_event.is_set()
-    def run(self):
-        #time.sleep(5)  # Simulate long running process
+    def run(self):   
         while not self.stopped():
-            single_frame = self.frame
-            #print "Doing stuff"
-            for x in range(200):
-                for y in range(64):
-                    value = os.read(self.device,3)
-                    if value == '':
-                        value = "0"
-                    single_frame[y][x] = int(value)
-                    #print single_frame[y][x]
-            print "frame"
+            time.sleep(0.5)  # Simulate long running process
+            frameFlattened = np.zeros((12800,1))
+            for i in range(6400):
+                pos = i*2
+                val1 = self.inputFile.readline()
+                if not val1:
+                    break
+                val1 = int(val1)
+                val0 = val1 & 0xFFF
+                val1 = val1 >> 16
+                frameFlattened[pos] = val0
+                frameFlattened[pos+1] = val1
+            single_frame = frameFlattened.reshape((64,200))
+            seconds_elapsed = 1/self.increments * self.counter * 12800
+            
+            #print "frame happened" + str(single_frame[1][1]) + " And seconds currently: " + str(seconds_elapsed)
+            self.queue.put((single_frame,seconds_elapsed,self.counter))
+            self.counter = self.counter + 1
             #self.queue.put(single_frame)
-            self.figure.clf()
-            a = self.figure.add_subplot(111)
-            a.imshow(single_frame, cmap='hot', interpolation='nearest',vmin=0,vmax=0xFFF)
+            #
 
-            a.set_title ("Estimation Grid", fontsize=16)
-            a.set_ylabel("Y", fontsize=14)
-            a.set_xlabel("X", fontsize=14)
-                
-            canvas = FigureCanvasTkAgg(self.figure, master=self.window)
-            canvas.get_tk_widget().grid(row=4,column=2,columnspan=6)
-            canvas.draw()
+
 
 window= Tk()
 start= mclass (window)

@@ -1,5 +1,5 @@
 #!/bin/bash
 
 sudo pigpiod
-python gui.py
+python qttrial.py
 
