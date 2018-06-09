@@ -90,6 +90,7 @@ static irqreturn_t rx_isr(int irq, void *data)
 	curPx = *(gpio_reg + 13);
 	curPx = (curPx & (0b111111111111<<(15)))>>(15);
 	
+	
 	if (prevPx == 0){
 		prevPx = curPx;
 	}else{
@@ -108,11 +109,22 @@ static irqreturn_t rx_isr(int irq, void *data)
 		wasOverflow = 0;
 		}
 	} 
+	
 	/*
 	pxValue[pWrite] = curPx;
 	pWrite = (pWrite + 1)  & (BUFFER_SZ - 1);
-	*/
+	if (pWrite == pRead) {
+		// overflow
+		pRead = ( pRead + 1 ) & (BUFFER_SZ-1);
+		if ( wasOverflow == 0 ) {
+	       		printk(KERN_ERR "EXT_ADC - Buffer Overflow - IRQ will be missed");
+	       		wasOverflow = 1;
+	    	}
+	} else {
+		wasOverflow = 0;
+	}
 	
+	*/
 	return IRQ_HANDLED;
 }
 
