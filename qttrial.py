@@ -27,6 +27,7 @@ class GuiViewer(QtGui.QWidget):
         self.sendSPIBtn = QtGui.QPushButton("Send SPI")
         self.quitBtn = QtGui.QPushButton("Quit")
         self.resetBtn = QtGui.QPushButton("Reset chip")
+        self.threadBtn = QtGui.QPushButton("Stop thread")
         self.sendSPIEdit = QtGui.QLineEdit(self)
 
         self.setSPIEdit = QtGui.QLineEdit(self)
@@ -55,6 +56,7 @@ class GuiViewer(QtGui.QWidget):
         grid.addWidget(self.setSPILb, 2, 0)
         grid.addWidget(self.setSPIEdit, 2, 1)
         grid.addWidget(self.resetBtn, 1, 2)
+        grid.addWidget(self.threadBtn, 2, 2)
         grid.addWidget(self.receivedSPILb, 3, 0)
         grid.addWidget(self.receivedSPIEdit, 3, 1)
         grid.addWidget(self.frameLb, 4, 2)
@@ -71,9 +73,10 @@ class GuiViewer(QtGui.QWidget):
         self.sendSPIBtn.clicked.connect(self.sendSPI)
         self.quitBtn.clicked.connect(self.quitWindow)
         self.resetBtn.clicked.connect(self.resetChip)
+        self.threadBtn.clicked.connect(self.stopThread)
 
         self.queue = Queue.Queue()
-        self.inputFile = open("out_readings.dat", "r")
+        self.inputFile = open("adc_data.dat", "r")
         self.thread = 0
         self.SPIhandle = 0
 
@@ -91,6 +94,11 @@ class GuiViewer(QtGui.QWidget):
             self.thread.join()
         self.inputFile.close()
         self.close()
+
+    def stopThread(self):
+        if self.thread != 0:
+            self.thread.stop() 
+            self.thread.join()
 
     def resetChip(self):
         if self.SPIhandle != 0 :
