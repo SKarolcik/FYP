@@ -8,6 +8,7 @@ import threading
 import Queue
 import time
 
+from matplotlib import cm
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 
@@ -38,6 +39,9 @@ class GuiViewer(QtGui.QWidget):
         self.frameLb = QtGui.QLabel('N = N/A')
         self.timeLb = QtGui.QLabel('t = N/A')
 
+        colormap = cm.get_cmap("jet")
+        colormap._init()
+        self.cmLut = (colormap._lut * 255).view(np.ndarray)
         #self.imv = pg.ImageView()
         self.imv = pg.GraphicsWindow()
         self.plot = self.imv.addPlot()
@@ -69,7 +73,7 @@ class GuiViewer(QtGui.QWidget):
         self.resetBtn.clicked.connect(self.resetChip)
 
         self.queue = Queue.Queue()
-        self.inputFile = open("adc_data.dat", "r")
+        self.inputFile = open("out_readings.dat", "r")
         self.thread = 0
         self.SPIhandle = 0
 
@@ -100,14 +104,15 @@ class GuiViewer(QtGui.QWidget):
             frame = self.queue.get()
             #self.imv.setImage(frame[0], levels=(0x000,0xFFF))
             im = pg.ImageItem(frame[0], levels=(0x000,0xFFF))
+            im.setLookupTable(self.cmLut)
             self.plot.addItem(im)
             #self.plot.hideAxis('left')
             #self.plot.hideAxis('bottom')
-            print ("Drawing " + str(frame[2]))
+            print ("Drawing frame: " + str(frame[2]) + ",With values: " + str(frame[0][10][0]))
             self.frameLb.setText(("N = " + str(frame[2])))
             self.timeLb.setText(("t = " + str(frame[1])))
 
-        QtCore.QTimer.singleShot(100, self.pollQueue)
+        QtCore.QTimer.singleShot(50, self.pollQueue)
             
                    
 
@@ -141,8 +146,6 @@ class ThreadedTask(threading.Thread):
         self._stop_event = threading.Event()
         self.counter = 0
         self.increments = (1.0/(float(FREQUENCY)/float(increments))) * 12800
-        self.frameFlattened = np.zeros((12800,1))
-        self.singleFrame = np.zeros((200,64))
     def stop(self):
         print "Stopping data read"
         self._stop_event.set()
@@ -150,8 +153,8 @@ class ThreadedTask(threading.Thread):
         return self._stop_event.is_set()
     def run(self):   
         while not self.stopped():
-            #time.sleep(0.5)  # Simulate long running process
-            
+            time.sleep(0.5)  # Simulate long running process
+            frameFlattened = np.zeros((12800,1))
             for i in range(6400):
                 pos = i*2
                 val1 = self.inputFile.readline()
@@ -160,12 +163,12 @@ class ThreadedTask(threading.Thread):
                 val1 = int(val1)
                 val0 = val1 & 0xFFF
                 val1 = val1 >> 16
-                self.frameFlattened[pos] = val0
-                self.frameFlattened[pos+1] = val1
-            print self.counter
-            self.singleFrame = self.frameFlattened.reshape((200,64))           
+                frameFlattened[pos] = val0
+                frameFlattened[pos+1] = val1
+            print ("Prepared frame: " + str(self.counter) + ",With value: " +str(frameFlattened[100]))
+            singleFrame = frameFlattened.reshape((200,64))           
             #print "frame happened" + str(single_frame[1][1]) + " And seconds currently: " + str(seconds_elapsed)
-            self.queue.put((self.singleFrame,(self.counter*self.increments),self.counter))
+            self.queue.put((singleFrame,(self.counter*self.increments),self.counter))
             self.counter = self.counter + 1
             #self.queue.put(self.singleFrame)
 
