@@ -86,10 +86,10 @@ class mclass:
         print ("SPI received: " + str(hex(rx_data[0])) + " " + str(hex(rx_data[1])))
         self.readSPIvalue["text"] = str(hex(rx_data[0])) + " " + str(hex(rx_data[1]))
         if (hex_data[0] >= 0x80):
-            #self.thread = ThreadedTask(self.inputFile, self.queue, hex_data[1])
-            #self.thread.start()
-            #time.sleep(1)
-            #self.pollQueue()
+            self.thread = ThreadedTask(self.inputFile, self.queue, hex_data[1])
+            self.thread.start()
+            time.sleep(1)
+            self.pollQueue()
             print "Started frame"
             
 class ThreadedTask(threading.Thread):

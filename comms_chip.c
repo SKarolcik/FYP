@@ -49,7 +49,7 @@ int main(int argc, char **argv)
    	printf("Pigpio intialized\n");
     }
 
-    if (gpioHardwareClock(4,2000000) == 0){
+    if (gpioHardwareClock(4,4000000) == 0){
 	printf("Clock started\n");
     }
 

@@ -261,7 +261,7 @@ class GuiViewer(QtGui.QWidget):
             self.frameLb.setText(("N = " + str(frame[2])))
             self.timeLb.setText(("t = " + str(frame[1])))
 
-        QtCore.QTimer.singleShot(100, self.pollQueue)
+        QtCore.QTimer.singleShot(300, self.pollQueue)
             
                    
 
@@ -302,14 +302,15 @@ class ThreadedTask(threading.Thread):
         return self._stop_event.is_set()
     def run(self):   
         while not self.stopped():
-            time.sleep(0.5)  # Simulate long running process
+            time.sleep(1)  # Simulate long running process
             frameFlattened = np.zeros((12800,1))
             for i in range(6400):
                 pos = i*2
                 val1 = self.inputFile.readline()
                 if val1 == '':
                     print ("Problem at: " + str(i))
-                    break
+                    print "Stopping data read"
+                    self._stop_event.set()
                 val1 = int(val1)
                 val0 = val1 & 0xFFF
                 val1 = val1 >> 16
