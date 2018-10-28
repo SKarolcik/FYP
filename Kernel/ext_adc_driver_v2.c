@@ -45,7 +45,7 @@
 #define GPIO_BIT11_ADC		26
 
 #define DEV_NAME 			"adccomms" 
-#define BUFFER_SZ			1048576 
+#define BUFFER_SZ			1024 //2097152 //0x00200000 
 
 #define BCM2708_PERI_BASE       0x3F000000
 #define GPIO_BASE               (BCM2708_PERI_BASE + 0x200000)	// GPIO controller  
@@ -90,23 +90,24 @@ static irqreturn_t rx_isr(int irq, void *data)
 	curPx = *(gpio_reg + 13);
 	curPx = (curPx & (0b111111111111<<(15)))>>(15);
 	
-	
-	if (prevPx == 0){
-		prevPx = curPx;
-	}else{
-		curPx = (curPx << (16)) + prevPx;
-		prevPx = 0;
-		pxValue[pWrite] = curPx;
-		pWrite = (pWrite + 1)  & (BUFFER_SZ - 1);
-		if (pWrite == pRead) {
-		// overflow
-			pRead = ( pRead + 1 ) & (BUFFER_SZ-1);
-			if ( wasOverflow == 0 ) {
-	       			printk(KERN_ERR "EXT_ADC - Buffer Overflow - IRQ will be missed");
-	       			wasOverflow = 1;
-	    		}
-		} else {
-		wasOverflow = 0;
+	if (wasOverflow == 0){
+		if (prevPx == 0){
+			prevPx = curPx;
+		}else{
+			curPx = (curPx << (16)) + prevPx;
+			prevPx = 0;
+			pxValue[pWrite] = curPx;
+			pWrite = (pWrite + 1)  & (BUFFER_SZ - 1);
+			if (pWrite == pRead) {
+			// overflow
+				pRead = ( pRead + 1 ) & (BUFFER_SZ-1);
+				if ( wasOverflow == 0 ) {
+		       			printk(KERN_ERR "EXT_ADC - Buffer Overflow - IRQ will be missed");
+		       			wasOverflow = 1;
+		    		}
+			} else {
+			wasOverflow = 0;
+			}
 		}
 	} 
 	
@@ -222,7 +223,7 @@ static int __init adccomms_init(void)
 	}
 	rx_irqs[0] = ret;
 	printk(KERN_INFO "EXT_ADC - Successfully requested RX IRQ # %d\n", rx_irqs[0]);
-	ret = request_irq(rx_irqs[0], rx_isr, IRQF_TRIGGER_FALLING | 0, "extadc#rx", NULL);
+	ret = request_irq(rx_irqs[0], rx_isr, IRQF_TRIGGER_FALLING | 0 | IRQF_NO_THREAD | IRQF_NOBALANCING | IRQF_NO_SOFTIRQ_CALL, "extadc#rx", NULL);
 	if(ret) {
 		printk(KERN_ERR "EXT_ADC - Unable to request IRQ: %d\n", ret);
 		goto fail3;

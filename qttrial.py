@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 __author__ = 'Stefan'
 import sys
 import os
@@ -178,7 +179,14 @@ class GuiViewer(QtGui.QWidget):
 
         #self.imv = pg.ImageView()
         self.imv = MplCmapImageView(additionalCmaps=['jet', 'viridis', 'seismic', 'cubehelix'])
-        self.imv.setLevels(0x000,0xFFF)
+        self.imv.setLevels(0,250)
+        
+        self.win = pg.GraphicsWindow(title="Average sensor value")
+        self.win.resize(1200,50)
+        self.avgVal = self.win.addPlot()
+        self.curve = self.avgVal.plot()
+        self.avgValVect = []
+        
         #cm_qt = cmapToColormap(cm.get_cmap("jet"))
         #cm_qt = map(list, zip(*cm_qt))
         #print cm_qt[0]
@@ -204,11 +212,12 @@ class GuiViewer(QtGui.QWidget):
         grid.addWidget(self.timeLb, 4, 3)
 
         grid.addWidget(self.imv, 5, 0, 4, 4)
+        grid.addWidget(self.win, 10, 0, 4, 4)
         
 
         self.setLayout(grid)
 
-        #self.setGeometry(450, 800, 450, 800)
+        self.setGeometry(200, 200, 1200, 800)
         self.setWindowTitle('ISFET viewer')    
         self.show()
         self.sendSPIBtn.clicked.connect(self.sendSPI)
@@ -218,6 +227,7 @@ class GuiViewer(QtGui.QWidget):
 
         self.queue = Queue.Queue()
         self.inputFile = open("out_readings.dat", "r")
+        self.outFile = open("avg_frames.dat", "w")
         self.thread = 0
         self.SPIhandle = 0
 
@@ -234,6 +244,7 @@ class GuiViewer(QtGui.QWidget):
             self.thread.stop() 
             self.thread.join()
         self.inputFile.close()
+        self.outFile.close()
         self.close()
 
     def stopThread(self):
@@ -252,6 +263,11 @@ class GuiViewer(QtGui.QWidget):
         if not self.queue.empty():
             frame = self.queue.get()
             self.imv.setImage(frame[0], autoRange=False, autoLevels=False, autoHistogramRange=False)
+            #print np.mean(frame[0].reshape((12800,1)))
+            avgDat = np.mean(frame[0].reshape((12800,1)))
+            self.avgValVect.append(avgDat)
+            self.outFile.write((str(avgDat) + "\n"))
+            self.curve.setData(self.avgValVect)
             #im = pg.ImageItem(frame[0], levels=(0x000,0xFFF))
             #self.imv.setLookupTable(self.cmLut)
             #self.plot.addItem(im)
@@ -261,7 +277,7 @@ class GuiViewer(QtGui.QWidget):
             self.frameLb.setText(("N = " + str(frame[2])))
             self.timeLb.setText(("t = " + str(frame[1])))
 
-        QtCore.QTimer.singleShot(300, self.pollQueue)
+        QtCore.QTimer.singleShot(100, self.pollQueue)
             
                    
 
@@ -302,20 +318,26 @@ class ThreadedTask(threading.Thread):
         return self._stop_event.is_set()
     def run(self):   
         while not self.stopped():
-            time.sleep(1)  # Simulate long running process
+            time.sleep(0.1)  # Simulate long running process
             frameFlattened = np.zeros((12800,1))
             for i in range(6400):
                 pos = i*2
                 val1 = self.inputFile.readline()
                 if val1 == '':
-                    print ("Problem at: " + str(i))
-                    print "Stopping data read"
-                    self._stop_event.set()
+		    time.sleep(0.5)
+		    val1 = self.inputFile.readline()
+		    if val1 == '':
+                        print ("Problem at: " + str(i))
+                        print "Stopping data read"
+                        self._stop_event.set()
+		
                 val1 = int(val1)
                 val0 = val1 & 0xFFF
                 val1 = val1 >> 16
-                frameFlattened[pos] = val0
-                frameFlattened[pos+1] = val1
+		i0 = ((2.0 - (val0/4095.0)*2.5)/8.0)*1000
+  		i1 = ((2.0 - (val1/4095.0)*2.5)/8.0)*1000
+                frameFlattened[pos] = i0
+                frameFlattened[pos+1] = i1
             print ("Prepared frame: " + str(self.counter) + ",With value: " +str(frameFlattened[100]))
             singleFrame = np.transpose(frameFlattened.reshape((64,200)))           
             #print "frame happened" + str(single_frame[1][1]) + " And seconds currently: " + str(seconds_elapsed)

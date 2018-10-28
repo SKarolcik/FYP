@@ -11,25 +11,42 @@ import threading
 import Queue
 
 
-file_out = open("new_frame.dat", "r")
+file_out = open("out_readings.dat", "r")
 
-
-frameFlattened = np.zeros((12800,1))
-for i in range(6400):
-    pos = i*2
-    val1 = file_out.readline()
-    if not val1:
-        break
-    val1 = int(val1)
-    #print hex(val1)
-    val0 = val1 & 0xFFFF
-    val1 = val1 >> 16
-    frameFlattened[pos] = val0
-    frameFlattened[pos+1] = val1
-single_frame = frameFlattened.reshape((64,200))
+avgs = np.zeros((780,1))
+for j in range(780):
+    frameFlattened = np.zeros((12800,1))
+    count = 0
+    for i in range(6400):
+        pos = i*2
+        val1 = file_out.readline()
+        if not val1:
+            break
+        val1 = int(val1)
+        #print hex(val1)
+        val0 = val1 & 0xFFF
+        val1 = val1 >> 16
+        i0 = ((2.0 - (val0/4095.0)*2.5)/8.0)*1000
+        i1 = ((2.0 - (val1/4095.0)*2.5)/8.0)*1000
+        frameFlattened[pos] = i0
+        frameFlattened[pos+1] = i1
+    
+    single_frame = frameFlattened
+    avg = np.mean(single_frame[0])
+    #print avg    
+    avgs[j] = avg
+    #print count
+    #if count > 800 :
+        #plt.imshow(single_frame, cmap='hot', interpolation='nearest',vmin=1,vmax=12800)
+        #plt.show()
+        
 #single_frame = np.transpose(frameFlattened.reshape((200,64)))
-#print single_frame
-plt.imshow(single_frame, cmap='hot', interpolation='nearest',vmin=1,vmax=12800)
+#print np.amax(single_frame)
+#print np.mean(single_frame)
+#print np.amin(single_frame)
+
+plt.plot(avgs)
+#plt.imshow(single_frame, cmap='hot', interpolation='nearest',vmin=1,vmax=12800)
 plt.show()
 
 

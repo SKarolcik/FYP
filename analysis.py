@@ -152,11 +152,12 @@ class MplCmapImageView(pg.ImageView):
 def getData():
     inputFile = open("out_readings.dat", "r")
     frames = []
+    count = 0
     while (1):
         frameFlattened = np.zeros((12800,1))
         for i in range(6400):
             pos = i*2
-            val1 = self.inputFile.readline()
+            val1 = inputFile.readline()
             if val1 == '':
                 print ("Problem at: " + str(i))
                 print "Stopping data read"
@@ -166,9 +167,11 @@ def getData():
             val1 = val1 >> 16
             frameFlattened[pos] = val0
             frameFlattened[pos+1] = val1
-            print ("Prepared frame: " + str(self.counter) + ",With value: " +str(frameFlattened[100]))
-            singleFrame = np.transpose(frameFlattened.reshape((64,200)))
-            frames.append(singleFrame)
+            #print ("Prepared frame: " + str(self.counter) + ",With value: " +str(frameFlattened[100]))
+        singleFrame = np.transpose(frameFlattened.reshape((64,200)))
+        frames.append(singleFrame)
+        print count
+        count = count + 1
 
 class GuiViewer(QtGui.QWidget):
 
@@ -180,8 +183,8 @@ class GuiViewer(QtGui.QWidget):
     def initUI(self):
 
 
-        #self.imv = pg.ImageView()
-        self.imv = MplCmapImageView(additionalCmaps=['jet', 'viridis', 'seismic', 'cubehelix'])
+        self.imv = pg.ImageView()
+        #self.imv = MplCmapImageView(additionalCmaps=['jet', 'viridis', 'seismic', 'cubehelix'])
         self.imv.setLevels(0x000,0xFFF)
         #cm_qt = cmapToColormap(cm.get_cmap("jet"))
         #cm_qt = map(list, zip(*cm_qt))
@@ -203,6 +206,12 @@ class GuiViewer(QtGui.QWidget):
         #self.setGeometry(450, 800, 450, 800)
         self.setWindowTitle('ISFET viewer')    
         self.show()
+        time.sleep(10)
+        for frame in self.frames:
+            time.sleep(1)
+            self.imv.setImage(frame, autoRange=False, autoLevels=False, autoHistogramRange=False)
+            print "Frame happeden"
+            
 
         
             
@@ -221,4 +230,12 @@ class GuiViewer(QtGui.QWidget):
             self.timeLb.setText(("t = " + str(frame[1])))
 
         QtCore.QTimer.singleShot(300, self.pollQueue)
-            
+        
+        
+def main():
+    app=QtGui.QApplication(sys.argv)
+    ex = GuiViewer()
+    sys.exit(app.exec_())
+    
+if __name__ == '__main__':
+    main()

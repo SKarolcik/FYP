@@ -3,13 +3,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main()
+int main(int argc, char** argv)
 {
 	FILE *ptr_file, *out_file;
 	char string_in[10];
+	//printf("Number of arguments: %d\n", argc);
+	//printf("Argument itself: %s\n", argv[1]);
 
 	ptr_file = fopen("/dev/adccomms", "r");
-	out_file = fopen("out_readings.dat", "w");	
+	if (argc == 2){
+	out_file = fopen(argv[1], "w");
+	}else{
+	out_file = fopen("out_readings.dat", "w");
+	}	
 	if (!ptr_file)
 	{
 	  printf ("Can't open input file!\n"); 
