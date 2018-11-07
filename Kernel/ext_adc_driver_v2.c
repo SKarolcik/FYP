@@ -45,7 +45,7 @@
 #define GPIO_BIT11_ADC		26
 
 #define DEV_NAME 			"adccomms" 
-#define BUFFER_SZ			1024 //2097152 //0x00200000 
+#define BUFFER_SZ			16384 //1024 //2097152 //0x00200000 
 
 #define BCM2708_PERI_BASE       0x3F000000
 #define GPIO_BASE               (BCM2708_PERI_BASE + 0x200000)	// GPIO controller  
@@ -91,8 +91,12 @@ static irqreturn_t rx_isr(int irq, void *data)
 	curPx = (curPx & (0b111111111111<<(15)))>>(15);
 	
 	if (wasOverflow == 0){
+		printk(KERN_INFO "EXT_ADC - write pointer: %d", pWrite);
 		if (prevPx == 0){
 			prevPx = curPx;
+			if(pWrite == 0){
+			printk(KERN_INFO "EXT_ADC - First pixel in");
+			}
 		}else{
 			curPx = (curPx << (16)) + prevPx;
 			prevPx = 0;

@@ -277,7 +277,7 @@ class GuiViewer(QtGui.QWidget):
             self.frameLb.setText(("N = " + str(frame[2])))
             self.timeLb.setText(("t = " + str(frame[1])))
 
-        QtCore.QTimer.singleShot(100, self.pollQueue)
+        QtCore.QTimer.singleShot(50, self.pollQueue)
             
                    
 
@@ -324,7 +324,7 @@ class ThreadedTask(threading.Thread):
                 pos = i*2
                 val1 = self.inputFile.readline()
                 if val1 == '':
-		    time.sleep(0.5)
+		    time.sleep(1)
 		    val1 = self.inputFile.readline()
 		    if val1 == '':
                         print ("Problem at: " + str(i))
