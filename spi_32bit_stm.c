@@ -38,12 +38,16 @@ void print_into_file (FILE * fp, int b_trans, int count, char frame[25600]){
 
 void flash_int(int gpio, int level, uint32_t tick, void *userdata)
 {
+    clock_t start = clock();
     int_data* main_struct = (int_data*) userdata;
     int b_trans = spiRead(main_struct->spi_stm32_h,main_struct->frame,25600);
     //clock_t start = clock();
     //fprintf(*(main_struct->file_p), "Frame: %d, at\n", main_struct->count);
     print_into_file(*(main_struct->file_p), b_trans, (int)main_struct->count, main_struct->frame);
     (main_struct->count)++;
+    clock_t end = clock();
+    double total = (double)(end - start)/CLOCKS_PER_SEC;
+    printf("Time of interrupt function: %f\n", total);
 }
 
 /*
@@ -92,7 +96,7 @@ int main(int argc, char **argv)
     //printf("original fp = %d\n",data_file);
 
     unsigned b_rate = 100000;
-    unsigned b_rate_stm32 = 3000000; //20MHz maximum
+    unsigned b_rate_stm32 = 5000000; //20MHz maximum
     /* SPI configs - 22bits
         bbbbbb R T nnnn W A u2u1u0 p2p1p0 mm
         b - word size p to 32 bits
