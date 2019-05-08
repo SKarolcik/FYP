@@ -9,6 +9,7 @@ import threading
 import Queue
 import time
 import collections
+import struct
 
 from matplotlib import cm
 from pyqtgraph.Qt import QtCore, QtGui
@@ -187,15 +188,6 @@ class GuiViewer(QtGui.QWidget):
         self.curve = self.avgVal.plot()
         self.avgValVect = []
         
-        #cm_qt = cmapToColormap(cm.get_cmap("jet"))
-        #cm_qt = map(list, zip(*cm_qt))
-        #print cm_qt[0]
-        #colormap = pg.ColorMap(cm_qt[0],cm_qt[1], 'rgb')
-        #self.imv.setColorMap(cmapToColormap(cm.get_cmap("jet")))
-
-        #self.imv = pg.GraphicsWindow()
-        #self.plot = self.imv.addPlot()
-
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
 
@@ -212,6 +204,7 @@ class GuiViewer(QtGui.QWidget):
         grid.addWidget(self.timeLb, 4, 3)
 
         grid.addWidget(self.imv, 5, 0, 4, 4)
+        
         grid.addWidget(self.win, 10, 0, 4, 4)
         
 
@@ -231,12 +224,19 @@ class GuiViewer(QtGui.QWidget):
         self.pi.hardware_clock(4, FREQUENCY) # 2 KHz clock on GPIO 4
         
         self.queue = Queue.Queue()
-        self.inputFile = open("out_readings.dat", "r")
-        self.outFile = open("avg_frames.dat", "w")
-        self.thread = 0
-        self.SPIhandle = self.pi.spi_open(0, 50000, 0b0100000011110000000001) 
+        self.thread_queue = Queue.Queue()
+        self.outFile = open("isfet_frames.dat", "w")
+        self.SPIhandle = self.pi.spi_open(0, 500000, 0b0100000011110000000001) 
         self.SPIhandle_STM32 = self.pi.spi_open(1, 5000000, 0b0100000011110000000001) 
+        self.pi.set_mode(27,pigpio.INPUT)
+        self.pi.set_mode(14,pigpio.OUTPUT)
         self.cb = self.pi.callback(27, pigpio.RISING_EDGE, self.isr_frame)
+        self.hex_data = [0,0]
+        self.time_el = 0.0
+        self.frames_el = 0
+        self.thread = ThreadedTask(self.outFile, self.thread_queue)
+        self.start_time = time.time()
+        #self.thread.start()
 
 
 
@@ -247,43 +247,59 @@ class GuiViewer(QtGui.QWidget):
         if self.thread != 0:
             self.thread.stop() 
             self.thread.join()
-        self.inputFile.close()
         self.outFile.close()
         self.close()
 
     def isr_frame (self, gpio, level, tick):
-        stm_frame = self.pi.spi_read(self.SPIhandle_STM32, 25600)
-        print stm_frame
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [0, 0])
+        self.pi.write(14,1)
+        byte_frame = self.pi.spi_read(self.SPIhandle_STM32, 25600)
+        int_values = list(byte_frame[1])
+        frame_values = [(int_values[i]*256+int_values[i+1]) for i in xrange(0, len(int_values), 2)]
+        frame_conv = map(lambda x : ((2.0 - (x/4095.0)*2.5)/8.0)*1000, frame_values)
+        frame = np.transpose(np.array(frame_conv).reshape((64,200)))
+        avgDat = np.mean(np.array(frame_conv))
+        self.avgValVect.append(avgDat)
+        #self.curve.setData(self.avgValVect)
+        self.pi.write(14,1)
+        #self.draw_frame(frame)
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, self.hex_data)
+        #print "Interrupt happened\n"
+        self.frames_el += 1
+        self.time_el = time.time() - self.start_time
+        #self.print_to_file(frame,avgDat)
+        self.queue.put((frame,self.frames_el, self.time_el, self.avgValVect))
+
+        #print stm_frame 
+    def print_to_file(self, frame, avgVal):
+        self.thread_queue.put((self.frames_el, frame, avgVal))
+        #self.outFile.write("Frame no: " + str(self.frames_el) + "\n")
+        #np.savetxt(self.outFile, frame, fmt='%.4f', delimiter=' ', newline='\n')
+        #self.outFile.write("Average values of frame: " + str(avgVal) + "\n\n")
+
 
     def stopThread(self):
         if self.thread != 0:
             self.thread.stop() 
             self.thread.join()
 
-    def resetChip(self):
-        if self.SPIhandle != 0 :
-            (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [5, 5])
-            self.setSPIEdit.setText("05 05")
-            self.receivedSPIEdit.setText((format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')))
+    def resetChip(self): 
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [5, 5])
+        self.setSPIEdit.setText("05 05")
+        self.receivedSPIEdit.setText((format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')))
             
     def pollQueue(self):
         #time.sleep(2)
         if not self.queue.empty():
             frame = self.queue.get()
             self.imv.setImage(frame[0], autoRange=False, autoLevels=False, autoHistogramRange=False)
-            #print np.mean(frame[0].reshape((12800,1)))
-            avgDat = np.mean(frame[0].reshape((12800,1)))
-            self.avgValVect.append(avgDat)
-            self.outFile.write((str(avgDat) + "\n"))
-            self.curve.setData(self.avgValVect)
-            #im = pg.ImageItem(frame[0], levels=(0x000,0xFFF))
-            #self.imv.setLookupTable(self.cmLut)
-            #self.plot.addItem(im)
-            #self.plot.hideAxis('left')
+            #self.outFile.write((str(avgDat) + "\n"))
+            self.curve.setData(frame[3])
             #self.plot.hideAxis('bottom')
-            print ("Drawing frame: " + str(frame[2]) + ",With values: " + str(frame[0][10][0]))
-            self.frameLb.setText(("N = " + str(frame[2])))
-            self.timeLb.setText(("t = " + str(frame[1])))
+            #print ("Drawing frame: " + str(self.frames_el))
+            time_in_s = "%.4f"% frame[2]
+            self.frameLb.setText(("N = " + str(frame[1])))
+            self.timeLb.setText(("t = " + time_in_s + "s"))
 
         QtCore.QTimer.singleShot(50, self.pollQueue)
             
@@ -295,62 +311,51 @@ class GuiViewer(QtGui.QWidget):
     def sendSPI(self):
         command = self.sendSPIEdit.text()
         self.sendSPIEdit.setText("")
-        hex_data = bytearray.fromhex(command)
-        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, hex_data)
-        sentString = format(hex_data[0], '02X') + " " + format(hex_data[1], '02X')
+        self.hex_data = bytearray.fromhex(command)
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, self.hex_data)
+        sentString = format(self.hex_data[0], '02X') + " " + format(self.hex_data[1], '02X')
         recString = format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')
         self.setSPIEdit.setText(sentString)
         self.receivedSPIEdit.setText(recString)
-        #if (hex_data[0] >= 0x80):
+        #print str(self.SPIhandle)
+        self.time_el = 0
+        self.frames_el = 0
+        self.avgValVect = []
+        #self.frames_el += 1
+        #self.time_el = self.time_el + (1.0/2000000.0)*(self.hex_data[1])*12800.0
+        #print str(self.hex_data[1])
+        #print self.frames_el
+        #print self.time_el
+        #if not self.queue.empty():
+            #print self.queue.get()
+        if (self.hex_data[0] >= 0x80):
             #self.thread = ThreadedTask(self.inputFile, self.queue, hex_data[1])
             #self.thread.start()
             #time.sleep(0.5)
-            #self.pollQueue()
+            self.start_time = time.time()
+            self.pollQueue()
             #print "Started frame"
-        
-
 
 class ThreadedTask(threading.Thread):
-    def __init__(self, inputFile, queue, increments):
+    def __init__(self, outFile, queue):
         threading.Thread.__init__(self)
-        self.inputFile = inputFile
+        self.outFile = outFile
         self.queue = queue
         self._stop_event = threading.Event()
-        self.counter = 0
-        self.increments = (1.0/(float(FREQUENCY)/float(increments))) * 12800
     def stop(self):
-        print "Stopping data read"
+        print "Stopping writing to file"
         self._stop_event.set()
     def stopped(self):
         return self._stop_event.is_set()
     def run(self):   
         while not self.stopped():
-            time.sleep(0.1)  # Simulate long running process
-            frameFlattened = np.zeros((12800,1))
-            for i in range(6400):
-                pos = i*2
-                val1 = self.inputFile.readline()
-                if val1 == '':
-		    time.sleep(1)
-		    val1 = self.inputFile.readline()
-		    if val1 == '':
-                        print ("Problem at: " + str(i))
-                        print "Stopping data read"
-                        self._stop_event.set()
-		
-                val1 = int(val1)
-                val0 = val1 & 0xFFF
-                val1 = val1 >> 16
-		i0 = ((2.0 - (val0/4095.0)*2.5)/8.0)*1000
-  		i1 = ((2.0 - (val1/4095.0)*2.5)/8.0)*1000
-                frameFlattened[pos] = i0
-                frameFlattened[pos+1] = i1
-            print ("Prepared frame: " + str(self.counter) + ",With value: " +str(frameFlattened[100]))
-            singleFrame = np.transpose(frameFlattened.reshape((64,200)))           
-            #print "frame happened" + str(single_frame[1][1]) + " And seconds currently: " + str(seconds_elapsed)
-            self.queue.put((singleFrame,(self.counter*self.increments),self.counter))
-            self.counter = self.counter + 1
-            #self.queue.put(self.singleFrame)
+            if not self.queue.empty():
+                frame_struct = self.queue.get()
+                self.outFile.write("Frame no: " + str(frame_struct[0]) + "\n")
+                np.savetxt(self.outFile, frame_struct[1], fmt='%.4f', delimiter=' ', newline='\n')
+                self.outFile.write("Average values of frame: " + str(frame_struct[2]) + "\n\n")
+
+
 
 
 def main():

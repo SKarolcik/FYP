@@ -34,6 +34,8 @@ for x in lines:
     else:
         vals = x.split(" ")
         for i in range(64):
+            if vals[i] == '':
+                vals[i] = 'FFFF'
             frame[line_count][i] = int(vals[i], 16)
         line_count = line_count + 1
 

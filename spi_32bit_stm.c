@@ -47,7 +47,7 @@ void flash_int(int gpio, int level, uint32_t tick, void *userdata)
     (main_struct->count)++;
     clock_t end = clock();
     double total = (double)(end - start)/CLOCKS_PER_SEC;
-    printf("Time of interrupt function: %f\n", total);
+    //printf("Time of interrupt function: %f\n", total);
 }
 
 /*
@@ -151,14 +151,14 @@ int main(int argc, char **argv)
 	    printf("ISR registered on pin 27\n");
 	}
 
-    while (config[1] != 0xFF)
+    while (count < 10)
     {
         printf("Input SPI configuration (two hex numbers): ");
         scanf("%x %x", &config[0], &config[1]);
 
         //printf("Sent to SPI: %02X %02X\n", config[0], config[1]);
         int b_trans = spiXfer(spi_handle,config,buf,2);
-        if (config[0] == 0x00){
+        if (config[1] == 0x00){
             gpioWrite(14, 1);
             usleep(10);
             gpioWrite(14, 0);
