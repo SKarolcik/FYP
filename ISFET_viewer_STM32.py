@@ -17,6 +17,8 @@ import pyqtgraph as pg
 
 FREQUENCY = 2000000
 
+#avconv -f x11grab -r 25 -s 1920x1080 -i :0.0+0,0 -vcodec libx264 video.mkv
+
 def cmapToColormap(cmap, nTicks=16):
     """
     Converts a Matplotlib cmap to pyqtgraphs colormaps. No dependency on matplotlib.
@@ -165,6 +167,8 @@ class GuiViewer(QtGui.QWidget):
         self.sendSPIBtn = QtGui.QPushButton("Send SPI")
         self.quitBtn = QtGui.QPushButton("Quit")
         self.resetBtn = QtGui.QPushButton("Reset chip")
+        self.refBtn = QtGui.QPushButton("Set reference")
+        self.clearBtn = QtGui.QPushButton("Clear reference")
         self.sendSPIEdit = QtGui.QLineEdit(self)
 
         self.setSPIEdit = QtGui.QLineEdit(self)
@@ -174,8 +178,8 @@ class GuiViewer(QtGui.QWidget):
         self.receivedSPIEdit.setReadOnly(True)
         self.receivedSPILb = QtGui.QLabel('Received SPI')
         self.logo = QtGui.QLabel(self)
-        pixmap = QtGui.QPixmap('Imperial_logo.png')
-        self.logo.setPixmap(pixmap.scaled(350,150,QtCore.Qt.KeepAspectRatio))
+        pixmap = QtGui.QPixmap('logo_with_desc.png')
+        self.logo.setPixmap(pixmap.scaled(501,200,QtCore.Qt.KeepAspectRatio))
 
         self.frameLb = QtGui.QLabel('N = N/A')
         self.timeLb = QtGui.QLabel('t = N/A')
@@ -185,6 +189,7 @@ class GuiViewer(QtGui.QWidget):
         self.imv.setLevels(0,250)
         tmp_frame = np.transpose(np.zeros((64,200)))
         self.imv.setImage(tmp_frame, autoRange=False, autoLevels=False, autoHistogramRange=False)
+
         
         self.win = pg.GraphicsWindow(title="Average frame value")
         self.win.resize(1200,50)
@@ -195,13 +200,15 @@ class GuiViewer(QtGui.QWidget):
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
 
-        grid.addWidget(self.logo, 1, 0, 3, 1)
+        grid.addWidget(self.logo, 1, 0, 4, 1)
         grid.addWidget(self.sendSPIBtn, 1, 1)
         grid.addWidget(self.sendSPIEdit, 1, 2)
         grid.addWidget(self.quitBtn, 1, 4)
         grid.addWidget(self.setSPILb, 2, 1)
         grid.addWidget(self.setSPIEdit, 2, 2)
         grid.addWidget(self.resetBtn, 1, 3)
+        grid.addWidget(self.refBtn, 2, 3)
+        grid.addWidget(self.clearBtn, 2, 4)
         grid.addWidget(self.receivedSPILb, 3, 1)
         grid.addWidget(self.receivedSPIEdit, 3, 2)
         grid.addWidget(self.frameLb, 4, 3)
@@ -220,6 +227,8 @@ class GuiViewer(QtGui.QWidget):
         self.sendSPIBtn.clicked.connect(self.sendSPI)
         self.quitBtn.clicked.connect(self.quitWindow)
         self.resetBtn.clicked.connect(self.resetChip)
+        self.refBtn.clicked.connect(self.setReference)
+        self.clearBtn.clicked.connect(self.clearReference)
 
         self.pi = pigpio.pi()             # exit script if no connection
         if not self.pi.connected:
@@ -241,10 +250,20 @@ class GuiViewer(QtGui.QWidget):
         self.pi.write(14,1)
         time.sleep(0.5)
         self.pi.write(14,0)
+        self.reference_frame = 0
+        self.reference_f = 0
+        self.frame = 0
+        self.setRef = 0
         #self.thread.start()
 
+    def clearReference(self):
+        self.reference_f = 0
+        self.setRef = 1
 
-
+    def setReference(self):
+        self.reference_frame = self.frame
+        self.reference_f = 1
+        self.setRef = 1
 
     def quitWindow(self):
         self.pi.hardware_clock(4,0)
@@ -257,9 +276,14 @@ class GuiViewer(QtGui.QWidget):
         byte_frame = self.pi.spi_read(self.SPIhandle_STM32, 25600)
         int_values = list(byte_frame[1])
         frame_values = [(int_values[i]*256+int_values[i+1]) for i in xrange(0, len(int_values), 2)]
-        frame_conv = map(lambda x : ((2.0 - (x/4095.0)*2.5)/8.0)*1000, frame_values)
-        frame = np.transpose(np.array(frame_conv).reshape((64,200)))
-        avgDat = np.mean(np.array(frame_conv))
+        frame_conv = np.array(map(lambda x : ((2.0 - (x/4095.0)*3.25)/8.0)*1000, frame_values))
+        self.frame = np.transpose(frame_conv.reshape((64,200)))
+        condition = (frame_conv>=60) & (frame_conv<=180)
+        reduced = np.extract(condition, frame_conv)
+        if reduced.size == 0:
+            avgDat = 0
+        else:
+            avgDat = np.mean(reduced)
         self.avgValVect.append(avgDat)
         #self.curve.setData(self.avgValVect)
         self.pi.write(14,0)
@@ -268,7 +292,7 @@ class GuiViewer(QtGui.QWidget):
         #print "Interrupt happened\n"
         self.frames_el += 1
         self.time_el = time.time() - self.start_time
-        self.queue.put((frame,self.frames_el, self.time_el, self.avgValVect))
+        self.queue.put((self.frame,self.frames_el, self.time_el, self.avgValVect))
 
 
     def stopThread(self):
@@ -287,7 +311,18 @@ class GuiViewer(QtGui.QWidget):
     def pollQueue(self):
         if not self.queue.empty():
             frame = self.queue.get()
-            self.imv.setImage(frame[0], autoRange=False, autoLevels=False, autoHistogramRange=False)
+            if (self.reference_f):
+                if(self.setRef):
+                    self.imv.setLevels(-5,1)
+                    self.setRef = 0
+                frame_to_display = np.subtract(frame[0],self.reference_frame)
+            else:
+                if(self.setRef):
+                    self.imv.setLevels(0,250)
+                    self.setRef = 0
+                frame_to_display = frame[0]
+            self.imv.setImage(frame_to_display, autoRange=False, autoLevels=False, autoHistogramRange=False)
+            #self.imv.setImage(frame[0])
             self.curve.setData(frame[3])
             time_in_s = "%.4f"% frame[2]
             self.frameLb.setText(("N = " + str(frame[1])))
