@@ -227,7 +227,7 @@ class GuiViewer(QtGui.QWidget):
         self.thread_queue = Queue.Queue()
         self.outFile = open("isfet_frames.dat", "w")
         self.SPIhandle = self.pi.spi_open(0, 500000, 0b0100000011110000000001) 
-        self.SPIhandle_STM32 = self.pi.spi_open(1, 5000000, 0b0100000011110000000001) 
+        self.SPIhandle_STM32 = self.pi.spi_open(1, 8000000, 0b0100000011110000000001) 
         self.pi.set_mode(27,pigpio.INPUT)
         self.pi.set_mode(14,pigpio.OUTPUT)
         self.cb = self.pi.callback(27, pigpio.RISING_EDGE, self.isr_frame)
@@ -236,6 +236,7 @@ class GuiViewer(QtGui.QWidget):
         self.frames_el = 0
         self.thread = ThreadedTask(self.outFile, self.thread_queue)
         self.start_time = time.time()
+        self.polling_started = 0
         self.thread.start()
 
 
@@ -259,16 +260,17 @@ class GuiViewer(QtGui.QWidget):
         frame_conv = map(lambda x : ((2.0 - (x/4095.0)*2.5)/8.0)*1000, frame_values)
         frame = np.transpose(np.array(frame_conv).reshape((64,200)))
         avgDat = np.mean(np.array(frame_conv))
-        self.avgValVect.append(avgDat)
         #self.curve.setData(self.avgValVect)
-        self.pi.write(14,1)
+        self.pi.write(14,0)
         #self.draw_frame(frame)
         (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, self.hex_data)
         #print "Interrupt happened\n"
-        self.frames_el += 1
         self.time_el = time.time() - self.start_time
-        self.thread_queue.put((self.frames_el, frame, avgVal))
-        self.queue.put((frame,self.frames_el, self.time_el, self.avgValVect))
+        self.thread_queue.put((self.frames_el, frame, avgDat))
+        if (self.frames_el % 10 == 0):
+            self.avgValVect.append(avgDat)
+            self.queue.put((frame,self.frames_el, self.time_el, self.avgValVect))
+        self.frames_el += 1
    
     def stopThread(self):
         if self.thread != 0:
@@ -279,6 +281,9 @@ class GuiViewer(QtGui.QWidget):
         (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [5, 5])
         self.setSPIEdit.setText("05 05")
         self.receivedSPIEdit.setText((format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')))
+        self.time_el = 0
+        self.frames_el = 0
+        self.avgValVect = []
             
     def pollQueue(self):
         #time.sleep(2)
@@ -293,7 +298,7 @@ class GuiViewer(QtGui.QWidget):
             self.frameLb.setText(("N = " + str(frame[1])))
             self.timeLb.setText(("t = " + time_in_s + "s"))
 
-        QtCore.QTimer.singleShot(50, self.pollQueue)
+        QtCore.QTimer.singleShot(200, self.pollQueue)
             
                    
 
@@ -310,9 +315,6 @@ class GuiViewer(QtGui.QWidget):
         self.setSPIEdit.setText(sentString)
         self.receivedSPIEdit.setText(recString)
         #print str(self.SPIhandle)
-        self.time_el = 0
-        self.frames_el = 0
-        self.avgValVect = []
         #self.frames_el += 1
         #self.time_el = self.time_el + (1.0/2000000.0)*(self.hex_data[1])*12800.0
         #print str(self.hex_data[1])
@@ -325,7 +327,9 @@ class GuiViewer(QtGui.QWidget):
             #self.thread.start()
             #time.sleep(0.5)
             self.start_time = time.time()
-            self.pollQueue()
+            if(not self.polling_started):
+                self.polling_started = 1
+                self.pollQueue()
             #print "Started frame"
 
 class ThreadedTask(threading.Thread):

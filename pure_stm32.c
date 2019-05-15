@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     }
 
     unsigned b_rate = 100000;
-    unsigned b_rate_stm32 = 5000000; //20MHz maximum
+    unsigned b_rate_stm32 = 8000000; //20MHz maximum
     /* SPI configs - 22bits
         bbbbbb R T nnnn W A u2u1u0 p2p1p0 mm
         b - word size p to 32 bits

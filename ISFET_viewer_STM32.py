@@ -173,13 +173,18 @@ class GuiViewer(QtGui.QWidget):
         self.receivedSPIEdit = QtGui.QLineEdit(self)
         self.receivedSPIEdit.setReadOnly(True)
         self.receivedSPILb = QtGui.QLabel('Received SPI')
+        self.logo = QtGui.QLabel(self)
+        pixmap = QtGui.QPixmap('Imperial_logo.png')
+        self.logo.setPixmap(pixmap.scaled(350,150,QtCore.Qt.KeepAspectRatio))
 
         self.frameLb = QtGui.QLabel('N = N/A')
         self.timeLb = QtGui.QLabel('t = N/A')
 
         #self.imv = pg.ImageView()
-        self.imv = MplCmapImageView(additionalCmaps=['jet', 'viridis', 'seismic', 'cubehelix'])
+        self.imv = MplCmapImageView(additionalCmaps=['jet', 'viridis', 'seismic', 'cubehelix'], view=pg.PlotItem())
         self.imv.setLevels(0,250)
+        tmp_frame = np.transpose(np.zeros((64,200)))
+        self.imv.setImage(tmp_frame, autoRange=False, autoLevels=False, autoHistogramRange=False)
         
         self.win = pg.GraphicsWindow(title="Average frame value")
         self.win.resize(1200,50)
@@ -190,20 +195,21 @@ class GuiViewer(QtGui.QWidget):
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
 
-        grid.addWidget(self.sendSPIBtn, 1, 0)
-        grid.addWidget(self.sendSPIEdit, 1, 1)
-        grid.addWidget(self.quitBtn, 1, 3)
-        grid.addWidget(self.setSPILb, 2, 0)
-        grid.addWidget(self.setSPIEdit, 2, 1)
-        grid.addWidget(self.resetBtn, 1, 2)
-        grid.addWidget(self.receivedSPILb, 3, 0)
-        grid.addWidget(self.receivedSPIEdit, 3, 1)
-        grid.addWidget(self.frameLb, 4, 2)
-        grid.addWidget(self.timeLb, 4, 3)
+        grid.addWidget(self.logo, 1, 0, 3, 1)
+        grid.addWidget(self.sendSPIBtn, 1, 1)
+        grid.addWidget(self.sendSPIEdit, 1, 2)
+        grid.addWidget(self.quitBtn, 1, 4)
+        grid.addWidget(self.setSPILb, 2, 1)
+        grid.addWidget(self.setSPIEdit, 2, 2)
+        grid.addWidget(self.resetBtn, 1, 3)
+        grid.addWidget(self.receivedSPILb, 3, 1)
+        grid.addWidget(self.receivedSPIEdit, 3, 2)
+        grid.addWidget(self.frameLb, 4, 3)
+        grid.addWidget(self.timeLb, 4, 4)
 
-        grid.addWidget(self.imv, 5, 0, 4, 4)
+        grid.addWidget(self.imv, 5, 0, 4, 5)
         
-        grid.addWidget(self.win, 10, 0, 4, 4)
+        grid.addWidget(self.win, 10, 0, 4, 5)
         
 
         self.setLayout(grid)
@@ -223,7 +229,7 @@ class GuiViewer(QtGui.QWidget):
         self.queue = Queue.Queue()
         self.thread_queue = Queue.Queue()
         self.SPIhandle = self.pi.spi_open(0, 500000, 0b0100000011110000000001) 
-        self.SPIhandle_STM32 = self.pi.spi_open(1, 5000000, 0b0100000011110000000001) 
+        self.SPIhandle_STM32 = self.pi.spi_open(1, 8000000, 0b0100000011110000000001) 
         self.pi.set_mode(27,pigpio.INPUT)
         self.pi.set_mode(14,pigpio.OUTPUT)
         self.cb = self.pi.callback(27, pigpio.RISING_EDGE, self.isr_frame)
@@ -231,6 +237,10 @@ class GuiViewer(QtGui.QWidget):
         self.time_el = 0.0
         self.frames_el = 0
         self.start_time = time.time()
+        self.polling_started = 0
+        self.pi.write(14,1)
+        time.sleep(0.5)
+        self.pi.write(14,0)
         #self.thread.start()
 
 
@@ -252,7 +262,7 @@ class GuiViewer(QtGui.QWidget):
         avgDat = np.mean(np.array(frame_conv))
         self.avgValVect.append(avgDat)
         #self.curve.setData(self.avgValVect)
-        self.pi.write(14,1)
+        self.pi.write(14,0)
         #self.draw_frame(frame)
         (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, self.hex_data)
         #print "Interrupt happened\n"
@@ -270,6 +280,9 @@ class GuiViewer(QtGui.QWidget):
         (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [5, 5])
         self.setSPIEdit.setText("05 05")
         self.receivedSPIEdit.setText((format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')))
+        self.time_el = 0
+        self.frames_el = 0
+        self.avgValVect = []
             
     def pollQueue(self):
         if not self.queue.empty():
@@ -280,7 +293,7 @@ class GuiViewer(QtGui.QWidget):
             self.frameLb.setText(("N = " + str(frame[1])))
             self.timeLb.setText(("t = " + time_in_s + "s"))
 
-        QtCore.QTimer.singleShot(50, self.pollQueue)
+        QtCore.QTimer.singleShot(30, self.pollQueue)
 
     def sendSPI(self):
         command = self.sendSPIEdit.text()
@@ -291,13 +304,13 @@ class GuiViewer(QtGui.QWidget):
         recString = format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')
         self.setSPIEdit.setText(sentString)
         self.receivedSPIEdit.setText(recString)
-        self.time_el = 0
-        self.frames_el = 0
-        self.avgValVect = []
+        
         #Start of acquisition
         if (self.hex_data[0] >= 0x80):
             self.start_time = time.time()
-            self.pollQueue()
+            if(not self.polling_started):
+                self.polling_started = 1
+                self.pollQueue()
 
 
 def main():
