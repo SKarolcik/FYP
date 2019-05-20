@@ -167,6 +167,8 @@ class GuiViewer(QtGui.QWidget):
         self.sendSPIBtn = QtGui.QPushButton("Send SPI")
         self.quitBtn = QtGui.QPushButton("Quit")
         self.resetBtn = QtGui.QPushButton("Reset chip")
+        self.startBtn = QtGui.QPushButton("Start chip readout")
+        self.startBtn.setStyleSheet("color: #013220")
         self.refBtn = QtGui.QPushButton("Set reference")
         self.clearBtn = QtGui.QPushButton("Clear reference")
         self.sendSPIEdit = QtGui.QLineEdit(self)
@@ -201,22 +203,23 @@ class GuiViewer(QtGui.QWidget):
         grid.setSpacing(10)
 
         grid.addWidget(self.logo, 1, 0, 4, 1)
-        grid.addWidget(self.sendSPIBtn, 1, 1)
-        grid.addWidget(self.sendSPIEdit, 1, 2)
+        grid.addWidget(self.startBtn, 1, 1, 1, 2)
+        grid.addWidget(self.sendSPIBtn, 2, 1)
+        grid.addWidget(self.sendSPIEdit, 2, 2)
         grid.addWidget(self.quitBtn, 1, 4)
-        grid.addWidget(self.setSPILb, 2, 1)
-        grid.addWidget(self.setSPIEdit, 2, 2)
+        grid.addWidget(self.setSPILb, 3, 1)
+        grid.addWidget(self.setSPIEdit, 3, 2)
         grid.addWidget(self.resetBtn, 1, 3)
         grid.addWidget(self.refBtn, 2, 3)
         grid.addWidget(self.clearBtn, 2, 4)
-        grid.addWidget(self.receivedSPILb, 3, 1)
-        grid.addWidget(self.receivedSPIEdit, 3, 2)
-        grid.addWidget(self.frameLb, 4, 3)
-        grid.addWidget(self.timeLb, 4, 4)
+        grid.addWidget(self.receivedSPILb, 4, 1)
+        grid.addWidget(self.receivedSPIEdit, 4, 2)
+        grid.addWidget(self.frameLb, 5, 3)
+        grid.addWidget(self.timeLb, 5, 4)
 
-        grid.addWidget(self.imv, 5, 0, 4, 5)
+        grid.addWidget(self.imv, 6, 0, 4, 5)
         
-        grid.addWidget(self.win, 10, 0, 4, 5)
+        grid.addWidget(self.win, 11, 0, 4, 5)
         
 
         self.setLayout(grid)
@@ -229,6 +232,7 @@ class GuiViewer(QtGui.QWidget):
         self.resetBtn.clicked.connect(self.resetChip)
         self.refBtn.clicked.connect(self.setReference)
         self.clearBtn.clicked.connect(self.clearReference)
+        self.startBtn.clicked.connect(self.startReadout)
 
         self.pi = pigpio.pi()             # exit script if no connection
         if not self.pi.connected:
@@ -255,6 +259,20 @@ class GuiViewer(QtGui.QWidget):
         self.frame = 0
         self.setRef = 0
         #self.thread.start()
+
+    def startReadout(self):
+        self.hex_data = [0x80, 0x12]
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, self.hex_data)
+        sentString = format(self.hex_data[0], '02X') + " " + format(self.hex_data[1], '02X')
+        recString = format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')
+        self.setSPIEdit.setText(sentString)
+        self.receivedSPIEdit.setText(recString)
+        self.startBtn.setEnabled(False)
+        
+        self.start_time = time.time()
+        if(not self.polling_started):
+            self.polling_started = 1
+            self.pollQueue()
 
     def clearReference(self):
         self.reference_f = 0
@@ -295,19 +313,14 @@ class GuiViewer(QtGui.QWidget):
         self.time_el = time.time() - self.start_time
         self.queue.put((self.frame,self.frames_el, self.time_el, self.avgValVect))
 
-
-    def stopThread(self):
-        if self.thread != 0:
-            self.thread.stop() 
-            self.thread.join()
-
     def resetChip(self): 
-        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [5, 5])
-        self.setSPIEdit.setText("05 05")
+        (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [0, 0])
+        self.setSPIEdit.setText("00 00")
         self.receivedSPIEdit.setText((format(rx_data[0], '02X') + " " + format(rx_data[1], '02X')))
         self.time_el = 0
         self.frames_el = 0
         self.avgValVect = []
+        self.startBtn.setEnabled(True)
             
     def pollQueue(self):
         if not self.queue.empty():
