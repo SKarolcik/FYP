@@ -278,12 +278,13 @@ class GuiViewer(QtGui.QWidget):
         frame_values = [(int_values[i]*256+int_values[i+1]) for i in xrange(0, len(int_values), 2)]
         frame_conv = np.array(map(lambda x : ((2.0 - (x/4095.0)*3.25)/8.0)*1000, frame_values))
         self.frame = np.transpose(frame_conv.reshape((64,200)))
-        condition = (frame_conv>=60) & (frame_conv<=180)
-        reduced = np.extract(condition, frame_conv)
-        if reduced.size == 0:
-            avgDat = 0
-        else:
-            avgDat = np.mean(reduced)
+        avgDat = np.mean(frame_conv)
+        #condition = (frame_conv>=60) & (frame_conv<=180)
+        #reduced = np.extract(condition, frame_conv)
+        #if reduced.size == 0:
+        #    avgDat = 0
+        #else:
+        #    avgDat = np.mean(reduced)
         self.avgValVect.append(avgDat)
         #self.curve.setData(self.avgValVect)
         self.pi.write(14,0)
@@ -313,7 +314,7 @@ class GuiViewer(QtGui.QWidget):
             frame = self.queue.get()
             if (self.reference_f):
                 if(self.setRef):
-                    self.imv.setLevels(-5,1)
+                    self.imv.setLevels(-1,4)
                     self.setRef = 0
                 frame_to_display = np.subtract(frame[0],self.reference_frame)
             else:
