@@ -224,7 +224,7 @@ class GuiViewer(QtGui.QWidget):
 
         self.setLayout(grid)
 
-        self.setGeometry(200, 200, 1200, 800)
+        self.setGeometry(250, 100, 1200, 900)
         self.setWindowTitle('ISFET viewer')    
         self.show()
         self.sendSPIBtn.clicked.connect(self.sendSPI)
