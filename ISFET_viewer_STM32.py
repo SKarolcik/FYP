@@ -327,7 +327,7 @@ class GuiViewer(QtGui.QWidget):
             frame = self.queue.get()
             if (self.reference_f):
                 if(self.setRef):
-                    self.imv.setLevels(-1,4)
+                    self.imv.setLevels(0,5)
                     self.setRef = 0
                 frame_to_display = np.subtract(frame[0],self.reference_frame)
             else:

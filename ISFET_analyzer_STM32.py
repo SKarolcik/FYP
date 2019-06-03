@@ -266,7 +266,7 @@ class GuiViewer(QtGui.QWidget):
         (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, self.hex_data)
         #print "Interrupt happened\n"
         self.time_el = time.time() - self.start_time
-        self.thread_queue.put((self.frames_el, frame, avgDat))
+        self.thread_queue.put((self.frames_el, frame, avgDat, self.time_el))
         if (self.frames_el % 10 == 0):
             self.avgValVect.append(avgDat)
             self.queue.put((frame,self.frames_el, self.time_el, self.avgValVect))
@@ -323,13 +323,12 @@ class GuiViewer(QtGui.QWidget):
         #if not self.queue.empty():
             #print self.queue.get()
         if (self.hex_data[0] >= 0x80):
-            #self.thread = ThreadedTask(self.inputFile, self.queue, hex_data[1])
-            #self.thread.start()
             #time.sleep(0.5)
             self.start_time = time.time()
             if(not self.polling_started):
                 self.polling_started = 1
                 self.pollQueue()
+            
             #print "Started frame"
 
 class ThreadedTask(threading.Thread):
@@ -347,7 +346,7 @@ class ThreadedTask(threading.Thread):
         while not self.stopped():
             if not self.queue.empty():
                 frame_struct = self.queue.get()
-                self.outFile.write("Frame no: " + str(frame_struct[0]) + "\n")
+                self.outFile.write("Frame no: " + str(frame_struct[0]) + "; Time elapsed = " + str(frame_struct[3]) + "s\n")
                 np.savetxt(self.outFile, frame_struct[1], fmt='%.4f', delimiter=' ', newline='\n')
                 self.outFile.write("Average values of frame: " + str(frame_struct[2]) + "\n\n")
 
