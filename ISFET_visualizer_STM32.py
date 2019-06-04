@@ -173,6 +173,8 @@ class GuiViewer(QtGui.QWidget):
         self.clearBtn = QtGui.QPushButton("Clear reference")
         self.getFilenameEdit = QtGui.QLineEdit(self)
 
+        self.saveBox = QtGui.QCheckBox("Save images")
+
         self.frameLb = QtGui.QLabel('N = N/A')
 
         self.logo = QtGui.QLabel(self)
@@ -193,6 +195,10 @@ class GuiViewer(QtGui.QWidget):
         self.avgVal = self.win.addPlot()
         self.curve = self.avgVal.plot()
         self.avgValVect = []
+
+        self.exporter_line = pg.exporters.ImageExporter(self.avgVal)
+        self.exporter_line.params.param('width').setValue(1920, blockSignal=self.exporter_line.widthChanged)
+        self.exporter_line.params.param('height').setValue(1080, blockSignal=self.exporter_line.heightChanged)
         
         grid = QtGui.QGridLayout()
         grid.setSpacing(10)
@@ -200,6 +206,7 @@ class GuiViewer(QtGui.QWidget):
         grid.addWidget(self.logo, 1, 0, 4, 1)
         grid.addWidget(self.sendSPIBtn, 1, 1)
         grid.addWidget(self.getFilenameEdit, 1, 2)
+        grid.addWidget(self.saveBox, 2, 2)
         grid.addWidget(self.startBtn, 1, 3)
         grid.addWidget(self.threadBtn, 2, 3)
         grid.addWidget(self.quitBtn, 2, 4)
@@ -277,12 +284,17 @@ class GuiViewer(QtGui.QWidget):
                     self.setRef = 0
                 frame_to_display = frame[0]
             self.imv.setImage(frame_to_display, autoRange=False, autoLevels=False, autoHistogramRange=False)
-            #self.imv.setImage(frame[0])
-            filestr = 'view' + str(frame[1]) + '.png'
-            self.exporter.export(filestr)
+            #self.imv.setImage(frame[0])           
             #self.outFile.write((str(avgDat) + "\n"))
             self.avgValVect.append(frame[2])
             self.curve.setData(self.avgValVect)
+            
+            if self.saveBox.isChecked():
+                filestr = 'view' + str(frame[1]) + '.png'
+                self.exporter.export(filestr)
+                filestr = 'line' + str(frame[1]) + '.png'
+                self.exporter_line.export(filestr)
+                
             #self.plot.hideAxis('bottom')
             #print ("Drawing frame: " + str(self.frames_el))
             self.frameLb.setText(("N = " + str(frame[1])))
