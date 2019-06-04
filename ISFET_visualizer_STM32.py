@@ -9,7 +9,8 @@ import threading
 #import Queue
 import queue
 import time
-import collections
+#import collections
+import collections.abc
 import struct
 
 from matplotlib import cm
@@ -183,6 +184,8 @@ class GuiViewer(QtGui.QWidget):
         self.imv.setLevels(0,250)
 
         self.exporter = pg.exporters.ImageExporter(self.imv.imageItem)
+        self.exporter.params.param('width').setValue(1920, blockSignal=self.exporter.widthChanged)
+        self.exporter.params.param('height').setValue(1080, blockSignal=self.exporter.heightChanged)
         #self.exporter.parameters()['width'] = 100
         
         self.win = pg.GraphicsWindow(title="Average sensor value")
@@ -262,6 +265,7 @@ class GuiViewer(QtGui.QWidget):
         #time.sleep(2)
         if not self.queueThr.empty():
             frame = self.queueThr.get()
+            self.frame = frame[0]
             if (self.reference_f):
                 if(self.setRef):
                     self.imv.setLevels(0,5)
@@ -316,11 +320,14 @@ class ThreadedTask(threading.Thread):
         while tmp:
             #frame_data = np.array([64,200])
             #frame_data = np.genfromtxt(self.infile, delimiter=' ', dtype=None,)
-            frame_data = np.reshape(np.fromfile(self.infile,count=12800,sep=" "), (64,200)) 
+            frame_data = np.reshape(np.fromfile(self.infile,count=12800,sep=" "), (200,64))
+            #frame_data = np.fromfile(self.infile,count=12800,sep=" ")
             avg_str = self.infile.readline()
             avgDat = re.findall("\d+\.\d+", avg_str)
-            self.queue.put((frame_data,self.counter,avgDat))
+            self.queue.put((frame_data,self.counter,float(avgDat[0])))
             self.counter = self.counter + 1 
+            tmp = self.infile.readline()
+            tmp = self.infile.readline()
         self.infile.close()
         
         
