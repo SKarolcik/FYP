@@ -315,7 +315,8 @@ class ThreadedTask(threading.Thread):
         tmp = self.infile.readline()
         while tmp:
             #frame_data = np.array([64,200])
-            frame_data = np.genfromtxt(self.infile, delimiter=' ', dtype=None) 
+            #frame_data = np.genfromtxt(self.infile, delimiter=' ', dtype=None,)
+            frame_data = np.reshape(np.fromfile(self.infile,count=12800,sep=" "), (64,200)) 
             avg_str = self.infile.readline()
             avgDat = re.findall("\d+\.\d+", avg_str)
             self.queue.put((frame_data,self.counter,avgDat))
