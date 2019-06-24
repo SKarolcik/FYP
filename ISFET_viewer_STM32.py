@@ -167,10 +167,14 @@ class GuiViewer(QtGui.QWidget):
         self.sendSPIBtn = QtGui.QPushButton("Send SPI")
         self.quitBtn = QtGui.QPushButton("Quit")
         self.resetBtn = QtGui.QPushButton("Reset chip")
-        self.startBtn = QtGui.QPushButton("Start chip readout")
+        self.startBtn = QtGui.QPushButton("Start CM array readout")
+        self.startPGBtn = QtGui.QPushButton("Start CM-PG array readout")
         self.startBtn.setStyleSheet("color: #013220")
+        self.startPGBtn.setStyleSheet("color: #013220")
         self.refBtn = QtGui.QPushButton("Set reference")
+        self.refPGBtn = QtGui.QPushButton("Set PG reference")
         self.clearBtn = QtGui.QPushButton("Clear reference")
+        self.clearPGBtn = QtGui.QPushButton("Clear PG reference")
         self.sendSPIEdit = QtGui.QLineEdit(self)
 
         self.setSPIEdit = QtGui.QLineEdit(self)
@@ -214,12 +218,15 @@ class GuiViewer(QtGui.QWidget):
         grid.addWidget(self.clearBtn, 2, 4)
         grid.addWidget(self.receivedSPILb, 4, 1)
         grid.addWidget(self.receivedSPIEdit, 4, 2)
-        grid.addWidget(self.frameLb, 5, 3)
-        grid.addWidget(self.timeLb, 5, 4)
+        grid.addWidget(self.startPGBtn, 5, 1, 1, 2)
+        grid.addWidget(self.refPGBtn, 5, 3)
+        grid.addWidget(self.clearPGBtn, 5, 4)
+        grid.addWidget(self.frameLb, 6, 3)
+        grid.addWidget(self.timeLb, 6, 4)
 
-        grid.addWidget(self.imv, 6, 0, 4, 5)
+        grid.addWidget(self.imv, 7, 0, 4, 5)
         
-        grid.addWidget(self.win, 11, 0, 4, 5)
+        grid.addWidget(self.win, 12, 0, 4, 5)
         
 
         self.setLayout(grid)
@@ -232,6 +239,8 @@ class GuiViewer(QtGui.QWidget):
         self.resetBtn.clicked.connect(self.resetChip)
         self.refBtn.clicked.connect(self.setReference)
         self.clearBtn.clicked.connect(self.clearReference)
+        self.refPGBtn.clicked.connect(self.calculatePGReference)
+        self.clearPGBtn.clicked.connect(self.clearPGReference)
         self.startBtn.clicked.connect(self.startReadout)
 
         self.pi = pigpio.pi()             # exit script if no connection
@@ -258,6 +267,9 @@ class GuiViewer(QtGui.QWidget):
         self.reference_f = 0
         self.frame = 0
         self.setRef = 0
+
+        self.PG_f = 0
+        self.PG_DAC_data = [0x00, 0x00]*12800
         #self.thread.start()
 
     def startReadout(self):
@@ -283,6 +295,20 @@ class GuiViewer(QtGui.QWidget):
         self.reference_f = 1
         self.setRef = 1
 
+    def calculatePGReference(self):
+        PG_initial_frame = np.transpose(self.frame).flatten('C')
+        condition = (PG_initial_frame>=40) & (PG_initial_frame<=180)
+        active_pixels = np.extract(condition, PG_initial_frame)
+        mean_current = np.mean(active_pixels)
+        for pixel in range (12800):
+        #print PG_initial_frame.shape
+        #print ("PG frame: " + str(PG_initial_frame[0]) + " " + str(PG_initial_frame[1]) + " " + str(PG_initial_frame[2]) + " " + str(PG_initial_frame[3]) + " " + str(PG_initial_frame[4]))    
+
+        #self.PG_f = 1
+
+    def clearPGReference(self):
+        self.PG_f = 0
+
     def quitWindow(self):
         self.pi.hardware_clock(4,0)
         self.pi.stop()
@@ -291,10 +317,14 @@ class GuiViewer(QtGui.QWidget):
     def isr_frame (self, gpio, level, tick):
         (count, rx_data) = self.pi.spi_xfer(self.SPIhandle, [0, 0])
         self.pi.write(14,1)
-        byte_frame = self.pi.spi_read(self.SPIhandle_STM32, 25600)
-        int_values = list(byte_frame[1])
+        if (self.PG_f):
+            (count, byte_frame) = self.pi.spi_xfer(self.SPIhandle_STM32, self.PG_DAC_data)
+        else:
+            (count, byte_frame) = self.pi.spi_xfer(self.SPIhandle_STM32, [0x00,0x00]*12800)
+        int_values = list(byte_frame)
         frame_values = [(int_values[i]*256+int_values[i+1]) for i in xrange(0, len(int_values), 2)]
         frame_conv = np.array(map(lambda x : ((2.0 - (x/4095.0)*3.25)/8.0)*1000, frame_values))
+        #print ("Real frame: " + str(frame_conv[0]) + " " + str(frame_conv[1]) + " " + str(frame_conv[2]) + " " + str(frame_conv[3]) + " " + str(frame_conv[4]))
         self.frame = np.transpose(frame_conv.reshape((64,200)))
         avgDat = np.mean(frame_conv)
         #condition = (frame_conv>=60) & (frame_conv<=180)
@@ -303,7 +333,8 @@ class GuiViewer(QtGui.QWidget):
         #    avgDat = 0
         #else:
         #    avgDat = np.mean(reduced)
-        self.avgValVect.append(avgDat)
+        if (self.frames_el > 0):
+            self.avgValVect.append(avgDat)
         #self.curve.setData(self.avgValVect)
         self.pi.write(14,0)
         #self.draw_frame(frame)
